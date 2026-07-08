@@ -19,4 +19,12 @@ for _mod in (geometry, blender):
 m2 = geometry.make_M2_mesh_data()
 blender.create_mesh_object("M2", m2)
 
+# registra un frame handler che ruota l'oggetto M2 di 1° per frame
 
+def on_frame_change(scene):
+    obj = bpy.data.objects.get("M2")
+    if obj is not None:
+        obj.rotation_euler.z = scene.frame_current * 0.01 
+        
+
+blender.register_frame_handler(on_frame_change)

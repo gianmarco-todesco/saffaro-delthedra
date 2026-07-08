@@ -38,3 +38,39 @@ def create_mesh_object(name: str,
     assign_material(obj, mat)
     return obj
     
+
+def register_frame_handler(update_fn):
+    """
+    Register a persistent ``frame_change_pre`` handler running *update_fn(scene)*.
+
+    General-purpose variant of :func:`register_rotation_animation`: the caller
+    supplies the full per-frame logic.  Any handler previously installed by
+    either function is removed first (shared sentinel), so switching between
+    scene scripts never stacks callbacks.
+
+    Parameters
+    ----------
+    update_fn : Callable[[bpy.types.Scene], None]
+        Called with the scene on every frame change.
+
+    Returns
+    -------
+    Callable
+        The registered handler.
+    """
+    FLAG = "my_handler"
+    handlers = bpy.app.handlers.frame_change_pre
+    for h in list(handlers):
+        if getattr(h, FLAG, False):
+            handlers.remove(h)
+
+    @bpy.app.handlers.persistent
+    def _on_frame(scene, _depsgraph=None):
+        update_fn(scene)
+
+    setattr(_on_frame, FLAG, True)
+    handlers.append(_on_frame)
+
+    _on_frame(bpy.context.scene)
+    print("[blender.utils] Registered generic frame handler")
+    return _on_frame
