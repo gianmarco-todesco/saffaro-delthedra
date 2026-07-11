@@ -332,3 +332,25 @@ def make_M2_mesh_data():
             ])
     return mesh_data
 
+def make_M2_fan_mesh_data(face_index, param):
+
+    ico = Polyhedron.ico
+    mesh_data = MeshData()
+
+    face = ico.get_face_vertices(face_index)
+    # Tre orientamenti della faccia: ruota ciclicamente i vertici (p0,p1,p2).
+    for vindex in range(3):
+        pts = [face[(vindex+i)%3] for i in range(3)]
+        fan = FaceFan(pts, param)
+        k = len(mesh_data.vertices)  # offset di questo ventaglio nella lista globale
+        mesh_data.vertices.extend(fan.points)
+        # Quattro triangoli a ventaglio attorno all'apice p3 (indice locale 3):
+        # collegano l'apice a p1, q1, q0, q2, p0 in sequenza.
+        mesh_data.faces.extend([
+            [k+3,k+1,k+5],
+            [k+3,k+5,k+4],
+            [k+3,k+4,k+6],
+            [k+3,k+6,k+0]
+        ])
+    return mesh_data
+

@@ -37,6 +37,23 @@ def create_mesh_object(name: str,
     mat = get_or_create_material(material_name)
     assign_material(obj, mat)
     return obj
+
+def update_mesh_object(name: str, 
+                       mesh_data: MeshData) -> bpy.types.Object:
+    """modifica i vertici di un oggetto mesh in Blender."""
+    if name not in bpy.data.objects:
+        print(f"[blender] update_mesh_object: object {name} does not exist. Skipping update.")
+        return
+    obj = bpy.data.objects[name]
+
+    vv = obj.data.vertices
+    if len(vv) != len(mesh_data.vertices):
+        print(f"[blender] update_mesh_object: object {name} has {len(vv)} vertices, but mesh_data has {len(mesh_data.vertices)} vertices. Skipping update.")
+        return
+
+    for i, v in enumerate(mesh_data.vertices):
+        vv[i].co = v
+    obj.data.update()    
     
 
 def register_frame_handler(update_fn):
