@@ -91,3 +91,7 @@ def register_frame_handler(update_fn):
     _on_frame(bpy.context.scene)
     print("[blender.utils] Registered generic frame handler")
     return _on_frame
+
+
+
+
