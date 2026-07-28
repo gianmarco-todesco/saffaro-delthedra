@@ -95,3 +95,19 @@ def register_frame_handler(update_fn):
 
 
 
+def get_or_create_empty(name, empty_type='PLAIN_AXES', size=1.0):
+    obj = bpy.data.objects.get(name)
+    if obj is None:
+        # crea il dato Empty (in realtà l'Empty non ha data-block, basta l'object)
+        obj = bpy.data.objects.new(name, None)   # None = Empty
+        obj.empty_display_type = empty_type
+        obj.empty_display_size = size
+        # collega alla collection della scena, altrimenti non compare
+        bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def set_parent(child, parent):
+    # keep_transform: l'oggetto non "salta" quando gli assegni il parent
+    child.parent = parent
+    child.matrix_parent_inverse = parent.matrix_world.inverted()
