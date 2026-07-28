@@ -1,41 +1,41 @@
 """
-Utilità geometriche per la costruzione del modello M2 di Lucio Saffaro.
+Utilità geometriche.
+Questo file contiene classi e funzioni relative alla geometria 3D
+Non ha dipendenze da Blender 
 
-Il modello M2 nasce da un icosaedro regolare: su ciascuna delle sue 20 facce
-triangolari viene innalzata una struttura a "ventaglio" (FaceFan). L'idea è
-sollevare un vertice sopra il centro della faccia e raccordare la faccia con un
-arco di circonferenza, in modo che le strutture di facce adiacenti si incontrino
-con la giusta inclinazione lungo gli spigoli condivisi.
-
-Il parametro chiave che governa la forma viene scelto (get_M2_parameter) in modo
-che l'angolo di apertura del ventaglio combaci con metà dell'angolo diedro
-dell'icosaedro: così le porzioni provenienti da due facce adiacenti risultano
-tangenti/complanari e il solido si chiude in modo coerente.
-
-Struttura del modulo:
-  - Vector                : vettore 3D con le operazioni di base.
-  - apply_matrix          : applica una matrice 4x4 a un Vector (coord. omogenee).
-  - matrix_from_triples   : matrice che mappa una tripla di punti in un'altra.
-  - Polyhedron            : poliedro generico (vertici + facce), con l'icosaedro
-                            di riferimento pre-costruito in Polyhedron.ico.
-  - make_icosahedron      : costruzione dell'icosaedro regolare.
-  - compute_angle_from_sides : teorema del coseno.
-  - FaceFanData           : calcolo dei parametri geometrici del ventaglio.
-  - get_M2_parameter      : ricerca del parametro caratteristico di M2.
-  - FaceFan               : generazione dei punti 3D del ventaglio su una faccia.
-  - MeshData              : contenitore di vertici e facce della mesh finale.
-  - make_M2_mesh_data     : assemblaggio dell'intera mesh M2 sui 20 triangoli.
+In particolare definisce Vector (vettore in R^3), Polyhedron (poliedro tramite vertici e facce) e 
+MeshData (molto simile a Polyhedron, ma utilizzato principalmente per l'export verso Blender).
 """
 
 import numpy as np
 
 
 class Vector:
-    """Vettore in R^3 con le operazioni algebriche e metriche essenziali."""
+    """Vettore in R^3 con le operazioni algebriche e metriche essenziali.
 
-    def __init__(self, tup = (0,0,0)):
-        # Inizializza le tre componenti a partire da una tupla/lista (x, y, z).
-        self.x, self.y, self.z = tup
+    Le tre componenti sono conservate in un unico array numpy `a` di forma (3,):
+    questa e' la sola rappresentazione interna, cosi' le operazioni delegano a
+    numpy e non c'e' piu' conversione Vector<->array sparsa nel codice.
+    Le proprieta' `x`, `y`, `z` restano disponibili per compatibilita'.
+    """
+
+    __slots__ = ("a",)  # niente __dict__: meno memoria per i tanti vertici
+
+    def __init__(self, tup: "tuple[float, float, float] | list[float]" = (0, 0, 0)):
+        # Inizializza le componenti da una tupla/lista/array (x, y, z), come float.
+        self.a = np.asarray(tup, dtype=float).reshape(3)
+
+    @property
+    def x(self):
+        return self.a[0]
+
+    @property
+    def y(self):
+        return self.a[1]
+
+    @property
+    def z(self):
+        return self.a[2]
 
     def __repr__(self):
         # Rappresentazione testuale compatta "(x,y,z)".
@@ -43,61 +43,97 @@ class Vector:
 
     def __add__(self, other):
         # Somma componente per componente.
-        return Vector((self.x+other.x,self.y+other.y,self.z+other.z))
+        return Vector(self.a + other.a)
 
     def __sub__(self, other):
         # Differenza componente per componente.
-        return Vector((self.x-other.x,self.y-other.y,self.z-other.z))
+        return Vector(self.a - other.a)
 
     def __mul__(self, k):
         # Moltiplicazione per uno scalare k.
-        return Vector((self.x*k,self.y*k,self.z*k))
+        return Vector(self.a * k)
+
+    def __rmul__(self, k):
+        # Permette anche `k * v`, oltre a `v * k`.
+        return Vector(self.a * k)
+
     def __truediv__(self, k):
         # Divisione per uno scalare k.
-        return Vector((self.x/k,self.y/k,self.z/k))
+        return Vector(self.a / k)
 
     def length(self):
         # Norma euclidea (modulo) del vettore.
-        return (self.x**2+self.y**2+self.z**2)**0.5
+        return float(np.sqrt(self.a @ self.a))
+
     def length2(self):
         # Norma al quadrato: evita la radice quando serve solo confrontare distanze.
-        return (self.x**2+self.y**2+self.z**2)
+        return float(self.a @ self.a)
+
     def dist(self, other):
         # Distanza euclidea tra questo punto e un altro.
-        return (self-other).length()
+        return (self - other).length()
+
+    def dot(self, other):
+        # Prodotto scalare tra due vettori.
+        return float(self.a @ other.a)
 
     def normalized(self):
         # Restituisce il versore (vettore di modulo 1) con la stessa direzione.
-        d = 1.0/self.length()
-        return Vector((self.x*d,self.y*d,self.z*d))
+        n = np.sqrt(self.a @ self.a)
+        if n == 0.0:
+            raise ValueError("normalized(): il vettore nullo non ha direzione")
+        return Vector(self.a / n)
 
-    def cross(self,other):
+    def cross(self, other):
         # Prodotto vettoriale: restituisce un vettore ortogonale a self e other.
-        return Vector((
-            self.y*other.z-self.z*other.y,
-            self.z*other.x-self.x*other.z,
-            self.x*other.y-self.y*other.x))
+        return Vector(np.cross(self.a, other.a))
+
+    def almost_equal(self, other, tol=1e-9):
+        # Uguaglianza approssimata, comoda per test e confronti robusti al float.
+        return bool(np.allclose(self.a, other.a, atol=tol, rtol=0.0))
 
     def tup(self):
         # Converte il vettore in una tupla (x, y, z), utile per l'export dei punti.
-        return (self.x,self.y,self.z)
+        return (float(self.a[0]), float(self.a[1]), float(self.a[2]))
 
 
-def apply_matrix(m, v):
+def apply_matrix(m, v:Vector):
     """Applica una matrice 4x4 (coordinate omogenee) al vettore v e restituisce
     il Vector trasformato.
 
     Il punto viene esteso a (x, y, z, 1), moltiplicato per m e riportato in R^3
     dividendo per la componente omogenea w (per trasformazioni affini w vale 1,
     ma la divisione gestisce correttamente anche matrici proiettive).
+
+    La matrice può essere ad es. [[1,0,0,0],[0,1,0,0],[0,0,1,0],[tx,ty,tz,1]] per una traslazione di (tx, ty, tz).
+    Il vettore v deve essere un'istanza di Vector.
     """
     m = np.asarray(m, dtype=float)
-    p = m @ np.array([v.x, v.y, v.z, 1.0])
-    w = p[3]
-    return Vector((p[0]/w, p[1]/w, p[2]/w))
+    p = m @ np.append(v.a, 1.0)
+    return Vector(p[:3] / p[3])
 
 
-def matrix_from_triples(src, dst):
+def transform_points(m, points):
+    """Applica una matrice 4x4 a molti punti in una sola operazione.
+
+    E' la versione "in blocco" di apply_matrix, pensata per i loop caldi che
+    trasformano tutti i vertici di una mesh (vedi 20-fans.py, prova2.py): invece
+    di iterare in Python punto per punto avvolgendo ogni vertice in un Vector, si
+    fa una singola moltiplicazione matriciale su tutti i punti.
+
+    `points` puo' essere un array (N, 3) oppure una lista di tuple/Vector;
+    restituisce un array numpy (N, 3). Per riportarlo a lista di tuple (es. per
+    MeshData / Blender) usare `.tolist()`.
+    """
+    m = np.asarray(m, dtype=float)
+    P = np.asarray([p.tup() if isinstance(p, Vector) else p for p in points], dtype=float)
+    P = P.reshape(-1, 3)
+    H = np.c_[P, np.ones(len(P))]        # coordinate omogenee (N, 4)
+    Q = H @ m.T                          # (N, 4)
+    return Q[:, :3] / Q[:, 3:4]          # divisione per la componente omogenea w
+
+
+def matrix_from_triples(src:tuple[Vector, Vector, Vector], dst:tuple[Vector, Vector, Vector]):
     """Restituisce la matrice 4x4 che mappa la tripla di punti src nella tripla dst.
 
     Tre corrispondenze di punti non bastano a determinare un'affinità generica
@@ -114,6 +150,10 @@ def matrix_from_triples(src, dst):
         u = b - a          # primo asse (spigolo a->b)
         v = c - a          # secondo asse (spigolo a->c)
         n = u.cross(v)     # terzo asse: normale al piano della tripla
+        if n.length2() == 0.0:
+            # Punti coincidenti o allineati: la normale e' nulla e il frame
+            # sarebbe singolare (np.linalg.inv fallirebbe in modo oscuro).
+            raise ValueError("matrix_from_triples(): tripla degenere (punti collineari)")
         return np.array([
             [u.x, v.x, n.x, a.x],
             [u.y, v.y, n.y, a.y],
@@ -127,7 +167,7 @@ def matrix_from_triples(src, dst):
 class Polyhedron:
     """Poliedro descritto da una lista di vertici e dalle facce (indici dei vertici)."""
 
-    def __init__(self, vertices, faces):
+    def __init__(self, vertices:list[Vector], faces:list[tuple[int, ...]]):
         self.vertices = vertices  # lista di Vector
         self.faces = faces        # lista di tuple di indici nella lista dei vertici
 
@@ -177,6 +217,9 @@ def compute_angle_from_sides(a,b,c):
     """Teorema del coseno: dato un triangolo con lati a, b, c, restituisce
     l'angolo (in radianti) opposto al lato a."""
     cosA = (b**2+c**2-a**2)/(2*b*c)
+    # Clamp a [-1, 1]: piccoli errori float potrebbero portare cosA appena fuori
+    # dal dominio di arccos e produrre nan.
+    cosA = np.clip(cosA, -1.0, 1.0)
     return np.arccos(cosA)
 
 
@@ -187,4 +230,17 @@ class MeshData:
     def __init__(self):
         self.vertices = []  # lista di punti (tuple x, y, z)
         self.faces = []     # lista di facce, ciascuna come lista di indici dei vertici
+
+    def append(self, other):
+        """Fonde `other` in questa mesh: aggiunge i suoi vertici e le sue facce.
+
+        I vertici si accodano; le facce vanno invece rimappate, perche' gli
+        indici di `other` sono relativi alla sua lista di vertici e vanno traslati
+        del numero di vertici gia' presenti in self. Modifica self (che viene
+        restituito per comodita' di concatenazione) e non altera `other`.
+        """
+        offset = len(self.vertices)
+        self.vertices.extend(other.vertices)
+        self.faces.extend([i + offset for i in face] for face in other.faces)
+        return self
 

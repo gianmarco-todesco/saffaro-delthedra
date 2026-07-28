@@ -12,22 +12,22 @@ if _DIR not in sys.path:
     sys.path.insert(0, _DIR)
 
 # questo serve nel caso che tu faccia modifiche ai moduli senza interrompere la sessione di Blender    
-import geometry, blender, fan
-for _mod in (geometry, blender, fan):
+import geometry, bl_utils, extended_face
+for _mod in (geometry, bl_utils, extended_face):
     importlib.reload(_mod)
     
 # crea la mesh M2 e l'oggetto Blender corrispondente
 
 #m2 = geometry.make_M2_mesh_data()
-#blender.create_mesh_object("M2", m2)
+#bl_utils.create_mesh_object("M2", m2)
 
 
 # param = geometry.get_M2_parameter()
 # #d = geometry.make_M2_fan_mesh_data(0, param)
-# #blender.create_mesh_object("M2_fan", d, material_name="M2_material")
+# #bl_utils.create_mesh_object("M2_fan", d, material_name="M2_material")
 
 # d = geometry.make_M2_fan_mesh_data(0, param + 0.2)
-# blender.update_mesh_object("M2_fan", d)
+# bl_utils.update_mesh_object("M2_fan", d)
 
 
 # # registra un frame handler che ruota l'oggetto M2 di 1° per frame
@@ -38,14 +38,14 @@ for _mod in (geometry, blender, fan):
 #     #    obj.rotation_euler.z = scene.frame_current * 0.01 
 #     param = scene.frame_current * 0.01 
 #     d = geometry.make_M2_fan_mesh_data(0, param + 0.2)
-#     blender.update_mesh_object("M2_fan", d)
+#     bl_utils.update_mesh_object("M2_fan", d)
 
-# blender.register_frame_handler(on_frame_change)
+# bl_utils.register_frame_handler(on_frame_change)
 
 
 
-md = fan.make_M2_fan(2*math.pi/4.3)
-blender.create_mesh_object("M2fan", md)
+md = extended_face.make_extended_face(2*math.pi/4.3)
+bl_utils.create_mesh_object("M2fan", md)
 
 
 def myparam_callback(self, context):

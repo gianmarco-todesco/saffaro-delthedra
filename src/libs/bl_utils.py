@@ -1,4 +1,13 @@
+"""
+Utilità per la scena Blender (creazione/aggiornamento di oggetti mesh, materiali,
+empty, handler dei frame) a partire dai MeshData della libreria.
+
+NB: richiede `bpy` -> eseguibile solo dentro Blender. A differenza di `geometry`
+ed `extended_face` (puri, coperti dai test), questo modulo non è testabile in CI.
+"""
+
 import bpy
+import bmesh
 
 from geometry import MeshData
 
@@ -38,17 +47,34 @@ def create_mesh_object(name: str,
     assign_material(obj, mat)
     return obj
 
+
+def merge_by_distance(obj: bpy.types.Object, distance: float = 1e-4) -> bpy.types.Object:
+    """Salda i vertici coincidenti dell'oggetto (equivalente al "Merge by
+    Distance" di Blender), fondendo quelli piu' vicini di `distance`.
+
+    Utile dopo aver assemblato una mesh da piu' pezzi (es. le 20 facce di M),
+    dove gli spigoli condivisi lasciano vertici duplicati coincidenti. Opera
+    direttamente sui dati della mesh via bmesh, senza cambiare il contesto/modo.
+    """
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=distance)
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+    return obj
+
 def update_mesh_object(name: str, 
                        mesh_data: MeshData) -> bpy.types.Object:
     """modifica i vertici di un oggetto mesh in Blender."""
     if name not in bpy.data.objects:
-        print(f"[blender] update_mesh_object: object {name} does not exist. Skipping update.")
+        print(f"[bl_utils] update_mesh_object: object {name} does not exist. Skipping update.")
         return
     obj = bpy.data.objects[name]
 
     vv = obj.data.vertices
     if len(vv) != len(mesh_data.vertices):
-        print(f"[blender] update_mesh_object: object {name} has {len(vv)} vertices, but mesh_data has {len(mesh_data.vertices)} vertices. Skipping update.")
+        print(f"[bl_utils] update_mesh_object: object {name} has {len(vv)} vertices, but mesh_data has {len(mesh_data.vertices)} vertices. Skipping update.")
         return
 
     for i, v in enumerate(mesh_data.vertices):
@@ -89,7 +115,7 @@ def register_frame_handler(update_fn):
     handlers.append(_on_frame)
 
     _on_frame(bpy.context.scene)
-    print("[blender.utils] Registered generic frame handler")
+    print("[bl_utils] Registered generic frame handler")
     return _on_frame
 
 

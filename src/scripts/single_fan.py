@@ -5,17 +5,17 @@ import math
 
 from bpy.app.handlers import persistent
 
-# rendi possibile importare i moduli dallo stesso folder dello script
+# rendi possibile importare i moduli da src/libs
 # (nota bene: __file__ non funziona dallo script editor di Blender,
 #  quindi si ricava il path del file dal datablock di testo attivo)
-filepath = bpy.context.space_data.text.filepath
-_DIR = os.path.dirname(filepath)
-if _DIR not in sys.path:
-    sys.path.insert(0, _DIR)
+_DIR = os.path.dirname(bpy.context.space_data.text.filepath)
+_LIBS = os.path.join(os.path.dirname(_DIR), "libs")  # script in src/scripts, librerie in src/libs
+if _LIBS not in sys.path:
+    sys.path.insert(0, _LIBS)
 
 # questo serve nel caso che tu faccia modifiche ai moduli senza interrompere la sessione di Blender    
-import geometry, blender, fan
-for _mod in (geometry, blender, fan):
+import geometry, bl_utils, extended_face
+for _mod in (geometry, bl_utils, extended_face):
     importlib.reload(_mod)
 
 
@@ -24,56 +24,51 @@ PROP_A = "param_a"
 PROP_B = "param_b"
 PANEL_IDNAME = "MyPanel"
 
-# creo l'empty
-pivot = blender.get_or_create_empty("pivot")
+FAN1 = "fan1"
+FAN2 = "fan2"
 
-# creo i ventagli
-md = fan.make_M2_fan(2*math.pi/4.3)
-for i in range(20):
-    obj = blender.create_mesh_object(f"fan{i}", md)
-    obj.parent = pivot
-    
-ico = geometry.Polyhedron.ico
-ico_side = (ico.vertices[ico.faces[0][0]]-ico.vertices[ico.faces[0][1]]).length()
+# creo i due ventagli
+md = extended_face.make_extended_face(2*math.pi/4.3)
+bl_utils.create_mesh_object(FAN1, md)
 
+pts1 = [geometry.Vector(p) for p in md.vertices]
+pts2 = pts1[:]
+
+triangle = [pts1[4*i] for i in range(3)]
+for i in range(3):
+    i1 = (i+1)%3
+    p0 = triangle[i]
+    p1 = triangle[i1]   
+    pts2[4*i+1] = (p0*(2/3)+p1*(1/3))
+    pts2[4*i+2] = (p0*(1/2)+p1*(1/2))
+    pts2[4*i+3] = (p0*(1/3)+p1*(2/3))
+
+pts2[12] = (triangle[0]+triangle[1]+triangle[2])/3
+
+
+#
+# Questa funzione aggiorna il modello in funzione di un parametro 'param'
+# che va da 0.0 a 1.0
+#
 def update_model(param):
     # mi assicuro che param sia compreso fra 0 e 1
     param = max(0,min(1,param)) 
-    theta = (1-param)*1.2 + param*1.5
-    md = fan.make_M2_fan(theta)
-    p0,p1,p2 = [geometry.Vector(md.vertices[4*i]) for i in range(3)]
-    factor = (p0-p1).length()/ico_side
-    
-    for i in range(20):
-        qs = [ico.vertices[ico.faces[i][j]]*factor for j in range(3)]
-        
-        mat = geometry.matrix_from_triples([p0,p1,p2],qs)
-        md = fan.make_M2_fan(theta)
-        for j in range(len(md.vertices)):
-            md.vertices[j] = geometry.apply_matrix(mat, geometry.Vector(md.vertices[j])).tup()
-        blender.update_mesh_object(f"fan{i}", md)
-
-
+    # calcolo l'angolo theta che controlla indirettamente la grandezza del lato del ventaglio
+    # rispetto al lato del triangolo dell'icosaedro.
+    for i in range(len(md.vertices)):
+        md.vertices[i] = (pts1[i]*(1-param)+pts2[i]*param).tup()
+    bl_utils.update_mesh_object(FAN1, md)
 
 # inizializzo il tutto
 update_model(0)
-
-
-def rebuild_model(scene):
-    # in frame_change_pre param_a NON è ancora aggiornato dal depsgraph:
-    # lo valuto io dalla fcurve
-    # a = eval_scene_prop(scene, PROP_A, getattr(scene, PROP_A))
-    a = 0.277*(0.5 + 0.5 * math.sin(scene.frame_current * 0.1))
     
+# questa funione viene richiamata in vari casi e aggiorna quello che va aggiornato
+# nota bene: i nomi update_model e rebuild_model fanno orrore. Dovremmo trovare qualcosa di meglio
+def rebuild_model(scene):
+    a = getattr(scene, PROP_A)
+    b = getattr(scene, PROP_B)
     update_model(a)
 
-
-@persistent
-def on_frame_change(scene, depsgraph=None):
-    try:
-        rebuild_model(scene)
-    except Exception as e:
-        print("[on_frame_change] errore ignorato:", e)
 # se la proprietà cambia chiamo rebuild_model
 def on_prop_changed(self, context):
     # 'self' è la Scene (la proprietà è registrata su Scene)
@@ -88,11 +83,9 @@ def on_frame_change(scene, depsgraph=None):
 # della stessa sessione, dalla precedente esecuzione dello script
 def cleanup():
     # handler
-    for lst in (bpy.app.handlers.frame_change_pre,
-                bpy.app.handlers.frame_change_post):
-        for h in list(lst):
-            if getattr(h, "__name__", "") == "on_frame_change":
-                lst.remove(h)
+    for h in list(bpy.app.handlers.frame_change_post):
+        if getattr(h, "__name__", "") == "on_frame_change":
+            bpy.app.handlers.frame_change_post.remove(h)
     # pannello
     cls = getattr(bpy.types, PANEL_IDNAME, None)
     if cls is not None:
@@ -108,7 +101,7 @@ def cleanup():
             except (AttributeError, RuntimeError):
                 pass    
 #m2 = geometry.make_M2_mesh_data()
-#blender.create_mesh_object("M2", m2)
+#bl_utils.create_mesh_object("M2", m2)
 
 class MyPanel(bpy.types.Panel):
     bl_label = "Generatore"
@@ -141,15 +134,15 @@ def register():
     # bpy.utils.register_class(SCENE_OT_gen_rebuild_now)
     bpy.utils.register_class(MyPanel)
 
-    bpy.app.handlers.frame_change_pre.append(on_frame_change)  # animazione
+    bpy.app.handlers.frame_change_post.append(on_frame_change)  # animazione
 
 
 # param = geometry.get_M2_parameter()
 # #d = geometry.make_M2_fan_mesh_data(0, param)
-# #blender.create_mesh_object("M2_fan", d, material_name="M2_material")
+# #bl_utils.create_mesh_object("M2_fan", d, material_name="M2_material")
 
 # d = geometry.make_M2_fan_mesh_data(0, param + 0.2)
-# blender.update_mesh_object("M2_fan", d)
+# bl_utils.update_mesh_object("M2_fan", d)
 
 
 # # registra un frame handler che ruota l'oggetto M2 di 1° per frame
@@ -160,9 +153,9 @@ def register():
 #     #    obj.rotation_euler.z = scene.frame_current * 0.01 
 #     param = scene.frame_current * 0.01 
 #     d = geometry.make_M2_fan_mesh_data(0, param + 0.2)
-#     blender.update_mesh_object("M2_fan", d)
+#     bl_utils.update_mesh_object("M2_fan", d)
 
-# blender.register_frame_handler(on_frame_change)
+# bl_utils.register_frame_handler(on_frame_change)
 
 
 register()

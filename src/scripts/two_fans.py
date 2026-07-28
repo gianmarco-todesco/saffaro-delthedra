@@ -5,17 +5,17 @@ import math
 
 from bpy.app.handlers import persistent
 
-# rendi possibile importare i moduli dallo stesso folder dello script
+# rendi possibile importare i moduli da src/libs
 # (nota bene: __file__ non funziona dallo script editor di Blender,
 #  quindi si ricava il path del file dal datablock di testo attivo)
-filepath = bpy.context.space_data.text.filepath
-_DIR = os.path.dirname(filepath)
-if _DIR not in sys.path:
-    sys.path.insert(0, _DIR)
+_DIR = os.path.dirname(bpy.context.space_data.text.filepath)
+_LIBS = os.path.join(os.path.dirname(_DIR), "libs")  # script in src/scripts, librerie in src/libs
+if _LIBS not in sys.path:
+    sys.path.insert(0, _LIBS)
 
 # questo serve nel caso che tu faccia modifiche ai moduli senza interrompere la sessione di Blender    
-import geometry, blender, fan
-for _mod in (geometry, blender, fan):
+import geometry, bl_utils, extended_face
+for _mod in (geometry, bl_utils, extended_face):
     importlib.reload(_mod)
 
 
@@ -28,9 +28,9 @@ FAN1 = "fan1"
 FAN2 = "fan2"
 
 # creo i due ventagli
-md = fan.make_M2_fan(2*math.pi/4.3)
-blender.create_mesh_object(FAN1, md)
-blender.create_mesh_object(FAN2, md)
+md = extended_face.make_extended_face(2*math.pi/4.3)
+bl_utils.create_mesh_object(FAN1, md)
+bl_utils.create_mesh_object(FAN2, md)
 
 #
 # Questa funzione aggiorna il modello in funzione di un parametro 'param'
@@ -43,17 +43,17 @@ def update_model(param):
     # rispetto al lato del triangolo dell'icosaedro.
     theta = (1-param)*1.2 + param*1.5
     # costruisco i punti che definiscono il ventaglio
-    md = fan.make_M2_fan(theta)
+    md = extended_face.make_extended_face(theta)
     # aggiorno la mesh del primo ventaglio
-    blender.update_mesh_object(FAN1, md)
+    bl_utils.update_mesh_object(FAN1, md)
     # prendo i punti della mesh
     V = [geometry.Vector(p) for p in md.vertices]
     # calcolo la trasformazione geometrica che "attacca" il secondo ventaglio al primo
     mat = geometry.matrix_from_triples([V[0],V[2],V[4]],[V[4],V[2],V[0]])
-    # modifico i punti applicando la trasformazione
-    md.vertices = [geometry.apply_matrix(mat,p).tup() for p in V]
+    # modifico i punti applicando la trasformazione (in blocco)
+    md.vertices = geometry.transform_points(mat, md.vertices).tolist()
     # aggiorno la mesh del secondo ventaglio
-    blender.update_mesh_object(FAN2, md)
+    bl_utils.update_mesh_object(FAN2, md)
 
 # inizializzo il tutto
 update_model(0)
@@ -97,7 +97,7 @@ def cleanup():
             except (AttributeError, RuntimeError):
                 pass    
 #m2 = geometry.make_M2_mesh_data()
-#blender.create_mesh_object("M2", m2)
+#bl_utils.create_mesh_object("M2", m2)
 
 class MyPanel(bpy.types.Panel):
     bl_label = "Generatore"
@@ -135,10 +135,10 @@ def register():
 
 # param = geometry.get_M2_parameter()
 # #d = geometry.make_M2_fan_mesh_data(0, param)
-# #blender.create_mesh_object("M2_fan", d, material_name="M2_material")
+# #bl_utils.create_mesh_object("M2_fan", d, material_name="M2_material")
 
 # d = geometry.make_M2_fan_mesh_data(0, param + 0.2)
-# blender.update_mesh_object("M2_fan", d)
+# bl_utils.update_mesh_object("M2_fan", d)
 
 
 # # registra un frame handler che ruota l'oggetto M2 di 1° per frame
@@ -149,9 +149,9 @@ def register():
 #     #    obj.rotation_euler.z = scene.frame_current * 0.01 
 #     param = scene.frame_current * 0.01 
 #     d = geometry.make_M2_fan_mesh_data(0, param + 0.2)
-#     blender.update_mesh_object("M2_fan", d)
+#     bl_utils.update_mesh_object("M2_fan", d)
 
-# blender.register_frame_handler(on_frame_change)
+# bl_utils.register_frame_handler(on_frame_change)
 
 
 register()
