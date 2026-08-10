@@ -43,7 +43,8 @@ Blender) e testate; `bl_utils` richiede `bpy` e gira solo dentro Blender.
 2. Vai nel tab **Scripting** (ultimo tab in alto).
 3. Nell'editor di testo a destra premi **Open** (o `Alt+O`) e carica uno script
    da `src/scripts/`, ad esempio `20-fans.py` per vedere il poliedro M. Il file
-   dev'essere salvato su disco: lo script ricava da solo la cartella `../libs`.
+   dev'essere salvato su disco: lo script ricava da solo la cartella `../libs`
+   dal percorso del testo aperto (anche se è relativo al `.blend`).
 4. Dai **Run Script** (`Alt+P` o il bottone ▶ sopra l'editor).
 5. Se tutto va bene compare il modello nella finestra 3D.
 

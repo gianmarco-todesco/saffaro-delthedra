@@ -5,8 +5,27 @@ import importlib
 # rendi possibile importare i moduli da src/libs
 # (nota bene: __file__ non funziona dallo script editor di Blender,
 #  quindi si ricava il path del file dal datablock di testo attivo)
-_DIR = os.path.dirname(bpy.context.space_data.text.filepath)
-_LIBS = os.path.join(os.path.dirname(_DIR), "libs")  # script in src/scripts, librerie in src/libs
+def _find_libs_dir():
+    txt = getattr(getattr(bpy.context, "space_data", None), "text", None)
+    if txt is None:  # lo script non gira dal Text Editor: cerco il datablock per nome
+        txt = bpy.data.texts.get("create_M.py")
+    if txt is None or not txt.filepath:
+        raise RuntimeError(
+            "non riesco a ricavare il path dello script: il testo non e' salvato "
+            "su disco (Text > Save As) oppure e' un blocco 'interno'"
+        )
+    # attenzione: se il file e' stato aperto con l'opzione 'Relative Path' spuntata,
+    # filepath e' del tipo '//../...' (relativo al .blend) e os.path lo interpreta
+    # come percorso UNC. bpy.path.abspath lo risolve; sugli assoluti non fa nulla.
+    path = os.path.abspath(bpy.path.abspath(txt.filepath))
+    # script in src/scripts, librerie in src/libs
+    libs = os.path.join(os.path.dirname(os.path.dirname(path)), "libs")
+    if not os.path.isdir(libs):
+        raise RuntimeError(f"cartella libs non trovata: {libs}  (filepath: {txt.filepath})")
+    return libs
+
+
+_LIBS = _find_libs_dir()
 if _LIBS not in sys.path:
     sys.path.insert(0, _LIBS)
 

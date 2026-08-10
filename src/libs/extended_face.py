@@ -236,3 +236,149 @@ def make_M(phi=PHI_CLOSING):
         piece.faces = base.faces               # stessa topologia; append rimappa gli indici
         M.append(piece)
     return M
+
+
+def _equidistant_point(p, q, r, dist, reference):
+    """Punto a distanza `dist` da tutti e tre i punti p, q, r.
+
+    E' l'intersezione di tre sfere di raggio `dist`: le soluzioni sono due,
+    simmetriche rispetto al piano di p, q, r, e si sceglie quella che sta dalla
+    stessa parte del punto `reference` (cosi' il risultato resta dalla parte da
+    cui si arriva, invece di ribaltarsi).
+
+    Il centro delle due soluzioni e' il circocentro di pqr, che si ricava dal
+    sistema lineare "equidistante da p,q,r" + "nel piano di p,q,r".
+    """
+    u = q - p
+    v = r - p
+    n = u.cross(v)
+    if n.length2() == 0.0:
+        raise ValueError("_equidistant_point(): i tre punti sono allineati o coincidenti")
+
+    # circocentro: (c-p).u = |u|^2/2, (c-p).v = |v|^2/2, (c-p).n = 0
+    center = p + Vector(np.linalg.solve(
+        np.array([u.a, v.a, n.a]),
+        np.array([0.5 * u.length2(), 0.5 * v.length2(), 0.0]),
+    ))
+    h2 = dist**2 - (center - p).length2()   # distanza dal piano, al quadrato
+    if h2 < 0.0:
+        raise ValueError(
+            f"_equidistant_point(): nessuna soluzione, il circoraggio "
+            f"({(center - p).length():.6f}) supera la distanza richiesta ({dist:.6f})"
+        )
+
+    offset = n.normalized() * math.sqrt(h2)
+    if (reference - center).dot(offset) < 0.0:
+        offset = offset * -1.0
+    return center + offset
+
+
+def flatten1_extended_face(md):
+    """Trasforma la faccia estesa md in una faccia estesa a 6 triangoli
+    equilateri. I vertici P0, P4, P8 (e l'apex P12) restano fissi;
+    I vertici P2, P6, P10 vengono spostati in modo da formare triangoli equilateri
+    con i vertici fissi. I vertici P1,P3, ecc. vengono messi nei punti medi dei
+    segmenti P0-P2, P4-P6, ecc.
+    Restituisce un nuovo MeshData con gli stessi vertici e facce di `md`, ma
+    con le coordinate modificate.
+
+    Costruzione: perche' il triangolo (apice, P0, P2) e quello (apice, P2, P4)
+    siano equilateri di lato s = |apice-P0|, il nuovo P2 deve stare a distanza s
+    dall'apice, da P0 e da P4: e' l'intersezione di tre sfere (vedi
+    `_equidistant_point`), di cui si prende la soluzione dalla parte del vecchio
+    P2. Mettendo poi P1 e P3 nei punti medi, i due triangolini che li usano
+    restano complanari con la meta' di ventaglio a cui appartengono: la mesh
+    conserva 13 vertici e 12 facce ma "si vede" come 6 triangoli.
+
+    Nota: i 6 triangoli sommano 6*60 = 360 gradi attorno all'apice, quindi la
+    faccia estesa diventa sviluppabile (un pezzo di carta piano, ma piegato lungo
+    le tre diagonali apice-P0, apice-P4, apice-P8).
+    """
+    if len(md.vertices) != N_TRIANGLES + 1:
+        raise ValueError(
+            f"flatten1_extended_face(): attesa una faccia estesa con "
+            f"{N_TRIANGLES + 1} vertici, ricevuti {len(md.vertices)}"
+        )
+
+    pts = [Vector(v) for v in md.vertices]
+    apex = pts[N_TRIANGLES]
+    side = apex.dist(pts[0])          # lato dei triangoli del ventaglio (1 per costruzione)
+    half = SEG_PER_EDGE // 2          # 2: passo fra un vertice dell'esagono e il successivo
+
+    # i 3 vertici mobili dell'esagono (P2, P6, P10)
+    for i in range(N_EDGES):
+        k = SEG_PER_EDGE * i + half
+        corner0 = pts[SEG_PER_EDGE * i]
+        corner1 = pts[SEG_PER_EDGE * ((i + 1) % N_EDGES)]
+        pts[k] = _equidistant_point(apex, corner0, corner1, side, reference=pts[k])
+
+    # i vertici rimasti finiscono nei punti medi dei lati dell'esagono
+    for k in range(1, N_TRIANGLES, half):
+        pts[k] = (pts[k - 1] + pts[(k + 1) % N_TRIANGLES]) / 2
+
+    new_md = MeshData()
+    new_md.vertices = [p.tup() for p in pts]
+    new_md.faces = md.faces.copy()
+    return new_md
+
+
+def flatten2_extended_face(md):
+    """Trasforma la faccia estesa md in un singolo triangolo.
+    i vertici P0, P4 e P8 rimangono fissi. 
+    P12 va al centro del triangolo P0,P4,P8. 
+    I vertici P1,P2,P3 sono rispettivamente ad 1/4, 2/4 e 3/4 del segmento P0-P4.
+    Analogamente per gli altri due lati.
+    Restituisce un nuovo MeshData con gli stessi vertici e facce di `md`, ma con le coordinate modificate.
+
+    E' il ventaglio completamente appiattito: tutti i vertici finiscono sul piano
+    del triangolo di base e le 12 facce, invece di degenerare, tassellano
+    esattamente il triangolo P0-P4-P8 (i 12 spicchi che si ottengono unendo il
+    baricentro ai 12 punti del bordo). Insieme a `flatten1_extended_face` da' la
+    sequenza triangolo -> 6 triangoli -> 12 triangoli usata per il morphing.
+
+    Usa solo P0, P4, P8, che sono fissi anche in `flatten1_extended_face`: la si
+    puo' quindi applicare indifferentemente alla faccia estesa o al risultato di
+    flatten1.
+    """
+    if len(md.vertices) != N_TRIANGLES + 1:
+        raise ValueError(
+            f"flatten2_extended_face(): attesa una faccia estesa con "
+            f"{N_TRIANGLES + 1} vertici, ricevuti {len(md.vertices)}"
+        )
+
+    pts = [Vector(v) for v in md.vertices]
+    corners = [pts[SEG_PER_EDGE * i] for i in range(N_EDGES)]
+
+    # ogni lato del triangolo di base torna dritto: i SEG_PER_EDGE-1 punti
+    # intermedi si distribuiscono uniformemente fra un angolo e il successivo
+    for i in range(N_EDGES):
+        p0 = corners[i]
+        p1 = corners[(i + 1) % N_EDGES]
+        for j in range(1, SEG_PER_EDGE):
+            pts[SEG_PER_EDGE * i + j] = p0 + (p1 - p0) * (j / SEG_PER_EDGE)
+
+    # l'apice scende nel baricentro del triangolo di base
+    pts[N_TRIANGLES] = Vector(np.mean([c.a for c in corners], axis=0))
+
+    new_md = MeshData()
+    new_md.vertices = [p.tup() for p in pts]
+    new_md.faces = md.faces.copy()
+    return new_md
+
+
+def morph(md1, md2, t):
+    """Interpolate linearly between two MeshData objects with the same topology.
+    `t` in [0,1] gives the interpolation factor: 0 returns md1, 1 returns md2."""
+    if len(md1.vertices) != len(md2.vertices):
+        raise ValueError("morph(): MeshData must have the same number of vertices")
+    if len(md1.faces) != len(md2.faces):
+        raise ValueError("morph(): MeshData must have the same number of faces")
+
+    new_md = MeshData()
+    new_md.vertices = [
+        tuple((1 - t) * np.array(v1) + t * np.array(v2))
+        for v1, v2 in zip(md1.vertices, md2.vertices)
+    ]
+    new_md.faces = md1.faces.copy()  # same topology
+    return new_md
+

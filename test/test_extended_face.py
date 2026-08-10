@@ -107,6 +107,136 @@ class TestChiusuraM(unittest.TestCase):
         self.assertLess(np.linalg.norm(ef._closure_gap_vector(ef.PHI_CLOSING)), 1e-9)
 
 
+class TestFlatten1(unittest.TestCase):
+    """flatten1_extended_face: il ventaglio di 12 triangoli diventa un ventaglio
+    di 6 triangoli equilateri (sviluppabile: 6*60 = 360 gradi all'apice)."""
+
+    def test_conteggi_e_input_immutato(self):
+        md = ef.make_extended_face(ef.PHI_CLOSING)
+        prima = list(md.vertices)
+        fd = ef.flatten1_extended_face(md)
+        self.assertEqual(len(fd.vertices), 13)
+        self.assertEqual(len(fd.faces), 12)
+        self.assertEqual(md.vertices, prima)   # non modifica l'originale
+
+    def test_vertici_fissi(self):
+        for phi in PHIS:
+            md = ef.make_extended_face(phi)
+            fd = ef.flatten1_extended_face(md)
+            for i in (0, 4, 8, 12):            # i 3 angoli del triangolo di base + apice
+                self.assertTrue(Vector(fd.vertices[i]).almost_equal(Vector(md.vertices[i])))
+
+    def test_sei_triangoli_equilateri_unitari(self):
+        for phi in PHIS:
+            V = np.array(ef.flatten1_extended_face(ef.make_extended_face(phi)).vertices)
+            apex = V[12]
+            for k in range(0, 12, 2):          # (apice, P_k, P_k+2)
+                p, q = V[k], V[(k + 2) % 12]
+                L = [np.linalg.norm(x - y) for x, y in [(apex, p), (p, q), (q, apex)]]
+                self.assertAlmostEqual(max(L) - min(L), 0.0, places=9)
+                self.assertAlmostEqual(np.mean(L), 1.0, places=9)
+
+    def test_vertici_dispari_nei_punti_medi(self):
+        V = np.array(ef.flatten1_extended_face(ef.make_extended_face(math.radians(73))).vertices)
+        for k in range(1, 12, 2):
+            np.testing.assert_allclose(V[k], (V[k - 1] + V[(k + 1) % 12]) / 2, atol=1e-12)
+
+    def test_meta_triangoli_complanari(self):
+        # P1 sta sul segmento P0-P2, quindi le facce (apice,P0,P1) e (apice,P1,P2)
+        # giacciono sullo stesso piano: le normali devono essere parallele.
+        V = np.array(ef.flatten1_extended_face(ef.make_extended_face(math.radians(73))).vertices)
+        apex = V[12]
+        for k in range(0, 12, 2):
+            n1 = np.cross(V[k] - apex, V[k + 1] - apex)
+            n2 = np.cross(V[k + 1] - apex, V[(k + 2) % 12] - apex)
+            self.assertAlmostEqual(np.linalg.norm(np.cross(n1, n2)), 0.0, places=12)
+
+    def test_angolo_totale_all_apice(self):
+        # 6 triangoli equilateri => 360 gradi: la faccia estesa e' sviluppabile.
+        V = np.array(ef.flatten1_extended_face(ef.make_extended_face(ef.PHI_CLOSING)).vertices)
+        apex = V[12]
+        tot = 0.0
+        for k in range(12):
+            u = V[k] - apex
+            v = V[(k + 1) % 12] - apex
+            cos = np.dot(u, v) / (np.linalg.norm(u) * np.linalg.norm(v))
+            tot += math.acos(np.clip(cos, -1.0, 1.0))
+        self.assertAlmostEqual(tot, 2 * math.pi, places=12)
+
+    def test_mesh_non_valida(self):
+        with self.assertRaises(ValueError):
+            ef.flatten1_extended_face(geometry.MeshData())
+
+
+class TestFlatten2(unittest.TestCase):
+    """flatten2_extended_face: il ventaglio collassa sul triangolo di base, che
+    resta tassellato dalle 12 facce."""
+
+    def test_conteggi_e_input_immutato(self):
+        md = ef.make_extended_face(ef.PHI_CLOSING)
+        prima = list(md.vertices)
+        fd = ef.flatten2_extended_face(md)
+        self.assertEqual(len(fd.vertices), 13)
+        self.assertEqual(len(fd.faces), 12)
+        self.assertEqual(md.vertices, prima)
+
+    def test_angoli_fissi_e_apice_nel_baricentro(self):
+        for phi in PHIS:
+            md = ef.make_extended_face(phi)
+            fd = ef.flatten2_extended_face(md)
+            for i in (0, 4, 8):
+                self.assertTrue(Vector(fd.vertices[i]).almost_equal(Vector(md.vertices[i])))
+            V = np.array(fd.vertices)
+            np.testing.assert_allclose(V[12], V[[0, 4, 8]].mean(axis=0), atol=1e-12)
+
+    def test_punti_intermedi_a_un_quarto(self):
+        for phi in PHIS:
+            V = np.array(ef.flatten2_extended_face(ef.make_extended_face(phi)).vertices)
+            for i in range(3):
+                p0, p1 = V[4 * i], V[(4 * i + 4) % 12]
+                for j in (1, 2, 3):
+                    atteso = p0 + (p1 - p0) * j / 4
+                    np.testing.assert_allclose(V[4 * i + j], atteso, atol=1e-12)
+
+    def test_tutto_sul_piano_del_triangolo_di_base(self):
+        V = np.array(ef.flatten2_extended_face(ef.make_extended_face(math.radians(73))).vertices)
+        n = np.cross(V[4] - V[0], V[8] - V[0])
+        n /= np.linalg.norm(n)
+        for v in V:
+            self.assertAlmostEqual(float(np.dot(v - V[0], n)), 0.0, places=12)
+
+    def test_le_12_facce_tassellano_il_triangolo(self):
+        # nessuna faccia degenere e somma delle aree = area del triangolo di base.
+        V = np.array(ef.flatten2_extended_face(ef.make_extended_face(ef.PHI_CLOSING)).vertices)
+
+        def area(p, q, r):
+            return 0.5 * np.linalg.norm(np.cross(q - p, r - p))
+
+        totale = 0.0
+        for f in ef.make_extended_face(ef.PHI_CLOSING).faces:
+            a = area(V[f[0]], V[f[1]], V[f[2]])
+            self.assertGreater(a, 1e-9)
+            totale += a
+        self.assertAlmostEqual(totale, area(V[0], V[4], V[8]), places=12)
+
+    def test_lato_del_triangolo_e_edge_span(self):
+        # il triangolo di base non viene toccato: il lato resta `a`.
+        for phi in PHIS:
+            V = np.array(ef.flatten2_extended_face(ef.make_extended_face(phi)).vertices)
+            self.assertAlmostEqual(float(np.linalg.norm(V[4] - V[0])), ef.edge_span(phi), places=9)
+
+    def test_anche_dopo_flatten1(self):
+        # P0, P4, P8 sono fissi in flatten1: flatten2 deve dare lo stesso risultato.
+        md = ef.make_extended_face(ef.PHI_CLOSING)
+        da_originale = np.array(ef.flatten2_extended_face(md).vertices)
+        da_flatten1 = np.array(ef.flatten2_extended_face(ef.flatten1_extended_face(md)).vertices)
+        np.testing.assert_allclose(da_flatten1, da_originale, atol=1e-12)
+
+    def test_mesh_non_valida(self):
+        with self.assertRaises(ValueError):
+            ef.flatten2_extended_face(geometry.MeshData())
+
+
 class TestMakeM(unittest.TestCase):
     def setUp(self):
         self.M = ef.make_M()
