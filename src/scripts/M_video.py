@@ -179,19 +179,15 @@ USE_STANDARD_VIEW = True
 # Verso cui va la luce. Nel quadro arriva da sinistra; la si tiene nel piano
 # dell'immagine (y = 0) perche' con FACE_SHADING = 'PAINTED' e' cosi' che le
 # facce *visibili* hanno la stessa proporzione di toni chiari e scuri del
-# quadro (si veda FACE_PALETTE): con una componente verso la scena (y > 0) M
+# quadro (si veda m_scene.PAINTING_PALETTE): con una componente verso la scena (y > 0) M
 # si schiarisce, con una verso la camera si scurisce.
 LIGHT_DIRECTION   = (0.866, 0.0, -0.5)   # da sinistra, un po' dall'alto
 LIGHT_STRENGTH    = 3.0
 
 # --- la texture delle facce ---
-# I tre vertici del triangolo azzurro in m2face_texture.png, in pixel, nello
-# stesso ordine dei vertici del triangolo canonico (in alto, in basso a
-# sinistra, a destra). Misurati sui pixel: nell'immagine il triangolo non e'
-# equilatero perche' e' ritagliato dal quadro, dove e' dipinto di scorcio.
-FACE_UV_PX    = ((109, 12), (36, 496), (452, 277))
-FACE_UV_INSET = 0.04            # la UV rientra del 4% verso il baricentro, per
-                                # non pescare i bordi scuri del ritaglio
+# I vertici del triangolo azzurro in m2face_texture.png: misure, si veda m_scene.
+FACE_UV_PX    = m_scene.FACE_TEXTURE_UV_PX
+FACE_UV_INSET = m_scene.FACE_TEXTURE_UV_INSET
 FACE_ROUGHNESS = 0.75
 
 # Come si colorano le facce.
@@ -209,26 +205,9 @@ FACE_ROUGHNESS = 0.75
 # 'PHYSICAL' -> Principled con la texture, illuminato dal sole e dall'ambiente.
 FACE_SHADING = 'PAINTED'
 
-# La tavolozza del quadro: (posizione, sRGB). Misurata su tutti i pixel del
-# poliedro dipinto in m.jpg, ordinati per luminanza: la posizione e' il
-# quantile, il colore e' la mediana dei pixel attorno a quel quantile.
-# La posizione di una faccia e' (n.l + 1) / 2, con n la normale e l la
-# direzione da cui arriva la luce: 0 volta le spalle alla luce, 0.5 la prende di
-# taglio, 1 la guarda in pieno. Non e' una scelta estetica: per normali sparse
-# in tutte le direzioni n.l e' distribuito uniformemente, quindi (n.l + 1) / 2
-# ha la stessa distribuzione dei quantili, e la proporzione fra toni chiari e
-# scuri torna con quella del quadro.
-FACE_PALETTE = [
-    (0.00, (2, 13, 36)),
-    (0.08, (4, 37, 74)),
-    (0.20, (12, 67, 106)),
-    (0.35, (19, 92, 130)),
-    (0.50, (24, 121, 169)),
-    (0.65, (26, 137, 186)),
-    (0.80, (28, 150, 199)),
-    (0.92, (26, 178, 226)),
-    (1.00, (30, 188, 228)),
-]
+# La tavolozza del quadro, e perche' la posizione di una faccia e' (n.l + 1) / 2:
+# si veda m_scene.PAINTING_PALETTE.
+FACE_PALETTE = m_scene.PAINTING_PALETTE
 FACE_GRAIN = 1.0                # quanto della grana della texture resta (0 = tinta piatta)
 
 USE_MERGED_M = True

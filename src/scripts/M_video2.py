@@ -139,19 +139,9 @@ USE_STANDARD_VIEW = True        # i colori escono come sono scritti (con AgX no)
 LIGHT_DIRECTION = (0.866, 0.0, -0.5)   # verso cui va la luce: da sinistra, un po' dall'alto
 LIGHT_STRENGTH  = 3.0                  # il sole illumina solo l'icosaedro
 
-FACE_UV_PX    = ((109, 12), (36, 496), (452, 277))
-FACE_UV_INSET = 0.04
-FACE_PALETTE = [
-    (0.00, (2, 13, 36)),
-    (0.08, (4, 37, 74)),
-    (0.20, (12, 67, 106)),
-    (0.35, (19, 92, 130)),
-    (0.50, (24, 121, 169)),
-    (0.65, (26, 137, 186)),
-    (0.80, (28, 150, 199)),
-    (0.92, (26, 178, 226)),
-    (1.00, (30, 188, 228)),
-]
+FACE_UV_PX    = m_scene.FACE_TEXTURE_UV_PX     # misure sulle immagini: si veda m_scene
+FACE_UV_INSET = m_scene.FACE_TEXTURE_UV_INSET
+FACE_PALETTE  = m_scene.PAINTING_PALETTE
 FACE_GRAIN = 1.0
 
 # --- l'icosaedro ---
@@ -270,79 +260,12 @@ def model_frame(md):
     return (lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2
 
 
-def mean_corner_srgb():
-    return tuple(sum(c[i] for c in BACKGROUND_CORNERS_SRGB.values()) / 4.0 for i in range(3))
-
-
-def _socket(sockets, identifier):
-    return next(s for s in sockets if s.identifier == identifier)
-
-
-def background_material():
-    """Emissione della sfumatura bilineare fra i quattro angoli, sulle UV del
-    piano (0,0 in basso a sinistra)."""
-    mat, nodes, links = KIT.new_material("background")
-    out = nodes.new("ShaderNodeOutputMaterial")
-    coord = nodes.new("ShaderNodeTexCoord")
-    xyz = nodes.new("ShaderNodeSeparateXYZ")
-    links.new(coord.outputs["UV"], xyz.inputs[0])
-
-    def mix(factor, a, b):
-        node = nodes.new("ShaderNodeMix")
-        node.data_type = 'RGBA'
-        links.new(factor, _socket(node.inputs, "Factor_Float"))
-        for socket, value in ((_socket(node.inputs, "A_Color"), a), (_socket(node.inputs, "B_Color"), b)):
-            if isinstance(value, tuple):
-                socket.default_value = value
-            else:
-                links.new(value, socket)
-        return _socket(node.outputs, "Result_Color")
-
-    c = {k: m_scene.linear_rgba(v) for k, v in BACKGROUND_CORNERS_SRGB.items()}
-    bottom = mix(xyz.outputs["X"], c["bottom_left"], c["bottom_right"])
-    top = mix(xyz.outputs["X"], c["top_left"], c["top_right"])
-    color = mix(xyz.outputs["Y"], bottom, top)
-    emit = nodes.new("ShaderNodeEmission")
-    links.new(color, emit.inputs["Color"])
-    links.new(emit.outputs["Emission"], out.inputs["Surface"])
-    return mat
-
-
 def build_background(cam, zoom):
-    """Il fondo: un piano figlio della camera, a BACKGROUND_MARGIN dietro la
-    griglia, grande esattamente quanto l'inquadratura (piu' BACKGROUND_BLEED).
-    Un driver lo scala con lo zoom, perche' resti grande quanto l'inquadratura
-    anche quando la camera allarga il campo."""
+    """Il fondo sfumato, a BACKGROUND_MARGIN dietro la griglia: si veda
+    m_scene.build_background."""
     depth = CAMERA_DISTANCE + GRID_DEPTH + BACKGROUND_MARGIN      # dalla camera
-    w = CAMERA.frame_width(zoom, depth) * BACKGROUND_BLEED
-    h = w / CAMERA.aspect
-    mesh = bpy.data.meshes.new(KIT.name("background"))
-    # nel riferimento della camera: X a destra, Y in alto, si guarda lungo -Z
-    mesh.from_pydata([(-w / 2, -h / 2, 0), (w / 2, -h / 2, 0),
-                      (w / 2, h / 2, 0), (-w / 2, h / 2, 0)], [], [(0, 1, 2, 3)])
-    layer = mesh.uv_layers.new(name="UVMap")
-    for li, uv in zip(mesh.polygons[0].loop_indices, ((0, 0), (1, 0), (1, 1), (0, 1))):
-        layer.data[li].uv = uv
-    mesh.materials.append(background_material())
-    obj = KIT.new_object("background", mesh, parent=cam)
-    obj.location = (0.0, 0.0, -depth)
-    m_scene.hide_from_light(obj)
-
-    # larghezza dell'inquadratura: proporzionale a ortho_scale, inversa della focale
-    var = CAMERA.zoom_path
-    expr = f"{var} / {zoom!r}" if CAMERA_TYPE == 'ORTHO' else f"{zoom!r} / {var}"
-    for axis in (0, 1):
-        fcurve = obj.driver_add("scale", axis)
-        driver = fcurve.driver
-        driver.type = 'SCRIPTED'
-        v = driver.variables.new()
-        v.name = var
-        v.type = 'SINGLE_PROP'
-        v.targets[0].id_type = 'CAMERA'
-        v.targets[0].id = cam.data
-        v.targets[0].data_path = var
-        driver.expression = expr
-    return obj
+    return m_scene.build_background(KIT, CAMERA, cam, zoom, depth,
+                                    BACKGROUND_CORNERS_SRGB, BACKGROUND_BLEED)
 
 
 def build_camera(eye, cage_radius):
@@ -379,7 +302,7 @@ def build():
         scene.view_settings.look = 'None'
 
     KIT.new_collection(scene)
-    m_scene.setup_world(KIT, mean_corner_srgb(), AMBIENT)
+    m_scene.setup_world(KIT, m_scene.mean_srgb(BACKGROUND_CORNERS_SRGB.values()), AMBIENT)
     m_scene.build_light(KIT, LIGHT_DIRECTION, LIGHT_STRENGTH)
 
     md = extended_face.make_M()

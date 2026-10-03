@@ -84,29 +84,81 @@ DOVE SI METTONO LE MANI
 * G1_TRACK, G2_TRACK, SPOKE_GROUP_1/2 -> quando arrivano i raggi del bordo,
                    e quali.
 * SPIN_TRACK    -> la rotazione di ogni faccia sul proprio asse.
+* WIRE_TRACK    -> quando compaiono e spariscono gli spigoli.
 * z_keys()      -> l'allontanamento dal centro, uguale per tutte.
 * scale_keys()  -> quando una faccia compare e sparisce; enter_order() decide
                    in che ordine rientrano le 18 finali.
+* FOLLOW_TRACK, PAIR_TRACK, DISTANCE_TRACK, LOWER_TRACK -> che cosa inquadra
+                   la camera, da quanto lontano e da quanto in basso.
+* glow_keys()   -> quando si accendono i lati.
 
 --------------------------------------------------------------------------
 IL MOVIMENTO D'INSIEME
 --------------------------------------------------------------------------
-Tutto e' appeso a un empty centrale (PIVOT_NAME): il poliedro gira facendo
-girare lui, in tre riprese da un giro, ognuna con ease in/out.
+Tutto e' appeso a un empty centrale (PIVOT_NAME): il poliedro compare
+scalandolo, e gira facendo girare lui, lentamente, con ease in/out.
 
-  giro1          l'icosaedro gira; a meta' le facce si staccano un po'
+  comparsa       l'icosaedro cresce da niente (scala del perno da 0 a 1)
+  fermo          resta fermo un secondo
+  giro1          un giro lento; dopo WIRES_AFTER_SECONDS compaiono gli spigoli
+                 (il raggio dei cilindri cresce da 0), nella seconda meta' le
+                 facce si staccano un po'
   via_le_altre   restano la prima faccia, le altre si scalano a zero
-  fase2..fase5   la faccia si apre (si veda sotto), girando due volte di 120
-                 gradi sul proprio asse -- che e' una simmetria del ventaglio,
-                 quindi resta al suo posto
-  t1_su, t1_giu  il grado di liberta': al massimo e poi al minimo, un viaggio solo
+  fase2..fase5   la faccia si apre (si veda sopra), senza girare: piegarsi e
+                 girare insieme davano un movimento convulso
+  giro_ventaglio il ventaglio formato fa un giro lento di 120 gradi sul proprio
+                 asse, che e' una simmetria del ventaglio
+  t1_giu, t1_su  il grado di liberta': al minimo e poi al massimo, un viaggio
+                 solo
   entra_B        compare la seconda faccia, gia' trasformata come la prima
-  avvicina       le due tornano al loro posto e si toccano sui triangoli di base
-  t1_giusto      t1 torna a T1_M: e' qui che i bordi combaciano
-  separa         si riallontanano
-  entrano_tutte  compaiono le altre 18, sfalsate, dalle vicine alle lontane
-  giro2          il poliedro gira con le facce ancora separate
-  chiusura+giro3 le facce rientrano mentre il poliedro fa l'ultimo giro
+  avvicina       le due tornano al loro posto e si toccano sui triangoli di base;
+                 t1 e' sopra T1_M, quindi fra le due spezzate resta una fessura.
+                 Si accendono i due lati in comune
+  t1_oltre       t1 scende oltre T1_M: la fessura si chiude e le facce si
+                 sovrappongono
+  t1_giusto      t1 torna a T1_M: i bordi combaciano, e A e B restano saldate
+  entrano_tutte  compaiono le altre 18, gia' al loro posto, dalle vicine alle
+                 lontane: M si riforma
+  giro2 .. giro3 M gira lentamente, due giri in tutto. Durante il primo:
+    stacca         le facce si allontanano un po'
+    pausa          un secondo cosi'
+    risalda        tornano al loro posto
+    spigoli_via    gli spigoli spariscono (il raggio dei cilindri torna a 0)
+  giro3          l'ultimo giro
+
+La camera tiene al centro il vertice centrale P0 della faccia A, e non il
+centro del rettangolo che la faccia occupa: P0 sta sull'asse del ventaglio, quindi
+non si muove quando la faccia gira, mentre il rettangolo cambia, e la camera che
+lo rincorreva oscillava. Intanto si abbassa un po' (CAMERA_LOWER_DEG), per
+mostrare la parte bassa del ventaglio.
+
+Fessura o sovrapposizione: con t1 sopra T1_M le due spezzate in comune restano
+staccate, sotto si incrociano (misurato: a t1 = 1.2 la fessura e' 0.38, a 0.6 la
+sovrapposizione e' 0.47). Per questo il viaggio di t1 finisce al massimo prima
+che entri B.
+
+--------------------------------------------------------------------------
+IL VIDEO: CAMERA, FONDO, MATERIALI
+--------------------------------------------------------------------------
+Lo script crea anche la camera (MS_camera), la luce, il mondo e il fondo, come
+M_video2: i nomi nuovi hanno il prefisso MS_.
+
+* la camera guarda sempre dalla stessa direzione (CAMERA_DIRECTION) e si sposta
+  soltanto: inquadra il poliedro intero, poi segue la faccia A mentre e' sola
+  tenendola al centro, poi la coppia A+B, e infine torna al poliedro. Il centro
+  da seguire si calcola dalla geometria vera di ogni fotogramma (forma, posto,
+  allontanamento, rotazione), letta dalle stesse fcurve che Blender usa;
+* il fondo e' quello di M_video2: un piano figlio della camera, sfumato fra i
+  quattro angoli (m_scene.build_background);
+* le facce hanno la texture di M (FACE_SHADING): i 12 triangoli del ventaglio
+  sono equilateri come quelli di M, quindi prendono la stessa UV. La luce
+  viene da un cielo fisico col sole basso (WORLD); in alternativa, il
+  materiale "dipinto" di M_video2 e il suo mondo;
+* i fili: la spezzata esterna in oro, i raggi che passano per P0 in un colore
+  diverso (SPOKE_COLOR). I tre lati della spezzata hanno ciascuno il suo
+  materiale, che si accende leggendo la proprieta' glow0/glow1/glow2
+  dell'oggetto-filo: i keyframe stanno in glow_keys(), e il bagliore lo fa il
+  compositor (m_scene.setup_glare), che sostituisce quello della scena.
 """
 
 import bpy
@@ -147,7 +199,8 @@ if _LIBS not in sys.path:
 
 # questo serve nel caso che tu faccia modifiche ai moduli senza interrompere la sessione di Blender
 import geometry, bl_utils, extended_face
-for _mod in (geometry, bl_utils, extended_face):
+import bl_anim, m_scene
+for _mod in (geometry, bl_utils, extended_face, bl_anim, m_scene):
     importlib.reload(_mod)
 
 from geometry import Vector, MeshData
@@ -162,22 +215,96 @@ MESH_NAME       = "fan"          # l'unico datablock di mesh: 13 vertici
 FAN_PREFIX      = "fan"          # fan_00 ... fan_19
 SEAT_PREFIX     = "seat"         # seat_00 ... seat_19: gli empty che tengono il
                                  # posto delle 20 facce sull'icosaedro
-MATERIAL_NAME   = "fan_surface"
-FAN_COLOR       = (0.85, 0.45, 0.15, 1.0)
+# --- il video: camera, luce, fondo, materiali (nomi MS_...) ---
+PREFIX     = "MS"
+# saffaro/assets, accanto al repository: src/libs -> src -> saffaro-delthedra -> saffaro
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(_LIBS))), "assets")
+RESOLUTION = (1920, 1080)
+USE_STANDARD_VIEW = True         # i colori escono come sono scritti (con AgX no)
+
+# il fondo e la luce d'ambiente: come M_video2
+BACKGROUND_CORNERS_SRGB = {
+    "top_left":     (34, 46, 70),
+    "top_right":    (16, 22, 38),
+    "bottom_left":  (20, 28, 46),
+    "bottom_right": (6, 8, 16),
+}
+BACKGROUND_BLEED = 1.02
+AMBIENT          = 0.5           # tocca solo i fili: le facce sono emissive
+
+# La luce, nel riferimento della camera (X a destra, Y in alto, Z verso chi
+# guarda): verso cui va. Da sinistra e un po' dall'alto, perpendicolare alla
+# direzione di vista: e' cosi' che i toni delle facce visibili tornano con quelli
+# del quadro (si veda m_scene.PAINTING_PALETTE). La camera non ruota mai, quindi
+# e' anche una direzione fissa nel mondo.
+LIGHT_IN_CAMERA = (0.866, -0.5, 0.0)
+LIGHT_STRENGTH  = 3.0            # con WORLD = 'FLAT': il sole illumina solo i fili
+FACE_GRAIN      = 1.0            # con FACE_SHADING = 'PAINTED': quanto della grana resta
+
+# Come si colorano le facce:
+#   'TEXTURE' -> la sola texture, su un Principled: l'ombreggiatura la fa la luce
+#   'PAINTED' -> la tavolozza del quadro, come M_video2 (m_scene.painted_face_material)
+FACE_SHADING   = 'TEXTURE'
+FACE_ROUGHNESS = 0.75
+# Con 'TEXTURE' le facce partono di un colore uniforme -- il colore medio della
+# texture, quindi la stessa tinta senza la grana: sul triangolo piatto la
+# texture ripetuta sui 12 pezzi non stava bene -- e passano alla texture appena
+# il ventaglio di 12 e' formato, in TEXTURE_FADE_SECONDS.
+TEXTURE_FADE_SECONDS = 0.5
+
+# Se facce e fili proiettano ombra. No, come nel quadro, dove ogni faccia ha
+# una tinta sola: il ventaglio e' concavo, e col sole basso un triangolo fa
+# ombra sui vicini con un bordo netto (il disco del sole e' piccolo) che parte
+# dall'apice -- perche' a proiettarlo e' un raggio -- e taglia la faccia in
+# due colori. I fili, con le loro ombre sottili, righerebbero le facce.
+CAST_SHADOWS = False
+
+# Il mondo:
+#   'SKY'  -> cielo fisico (Sky Texture) col sole basso, che illumina tutto; il
+#             sole sta dalla parte da cui arriva LIGHT_IN_CAMERA, cioe' a
+#             sinistra della camera. Niente lampada: il sole e' quello del cielo
+#   'FLAT' -> fondo uniforme poco luminoso piu' una lampada Sun (come M_video2)
+# In tutti e due i casi quello che si vede dietro e' il fondo sfumato.
+WORLD               = 'SKY'
+SKY_SUN_ELEVATION   = 15.0       # gradi sopra l'orizzonte
+SKY_STRENGTH        = 0.1        # il cielo e' in unita' fisiche: va tarato sui render
+
+# --- la camera ---
+# Guarda sempre dalla direzione CAMERA_DIRECTION (dal punto inquadrato verso la
+# camera: e' quella della camera fatta a mano in M_story.blend) e si sposta
+# soltanto, senza ruotare.
+CAMERA_DIRECTION = (9.216, 1.316, 7.532)
+CAMERA_LENS      = 50.0          # mm, sensore da 36
+CAMERA_ICO       = 8.0           # distanza all'inizio, sull'icosaedro (piccolo)
+CAMERA_LOWER_DEG = 12.0          # di quanto la camera si abbassa, dall'inizio al ventaglio di 12
+CAMERA_FAR       = 16.0          # distanza quando inquadra il poliedro intero
+CAMERA_NEAR      = 7.0           # ... la faccia A da sola
+CAMERA_PAIR      = 9.5           # ... le facce A e B
+PAIR_LEAD        = 1.0           # secondi: la camera passa alla coppia prima che B compaia
+BACKGROUND_DEPTH = 30.0          # di quanto il fondo sta davanti alla camera
 
 # --- il bordo: cilindri sugli spigoli, sferette sui vertici ---
 WIRE_MESH_NAME  = "fan_wire"     # la seconda mesh condivisa
 WIRE_PREFIX     = "wire"         # wire_00 ... wire_19
-EDGE_MATERIAL   = "fan_edge"     # la spezzata esterna, e le sue sferette
-SPOKE_MATERIAL  = "fan_spoke"    # i raggi che passano per P0, e il mozzo
-EDGE_COLOR      = (0.06, 0.07, 0.10, 1.0)
-SPOKE_COLOR     = (0.95, 0.72, 0.15, 1.0)
+EDGE_COLOR      = (0.95, 0.72, 0.15, 1.0)   # la spezzata esterna: oro
+SPOKE_COLOR     = (0.93, 0.89, 0.80, 1.0)   # i raggi che passano per P0: champagne
+
+# I lati che si accendono: la spezzata esterna e' fatta di tre lati di 4
+# segmenti, e ognuno ha il suo materiale con la sua proprieta' (glow0, glow1,
+# glow2 sull'oggetto-filo). Il bagliore lo fa il compositor: GLARE_THRESHOLD
+# sopra 1 perche' brillino solo i fili accesi.
+GLOW_COLOR        = (1.0, 0.85, 0.45)
+GLOW_STRENGTH     = 6.0
+GLOW_RAMP_SECONDS = 0.4          # quanto ci mette un lato ad accendersi o spegnersi
+GLARE_THRESHOLD   = 1.5
+GLARE_STRENGTH    = 1.0
+GLARE_SIZE        = 0.5
 
 TUBE_RADIUS     = 0.011          # in lati di triangolo (il lato vale 1)
 TUBE_SIDES      = 8
 SPOKE_RAMP      = 0.12           # in quanta parte della crescita un raggio
                                  # passa da punta a tubo pieno
-VERTEX_RADIUS   = 0.026          # le sferette sui vertici, quando contano
+VERTEX_RADIUS   = TUBE_RADIUS    # le sferette sui vertici: grandi come i cilindri
 VERTEX_RADIUS_HIDDEN = 0.008     # < TUBE_RADIUS: la sferetta di un vertice che
                                  # non ha ancora il suo raggio sparisce dentro
                                  # il cilindro degli spigoli
@@ -192,6 +319,9 @@ FRAME_START = 1
 T1_M   = extended_face.edge_span(extended_face.PHI_CLOSING)   # 0.910757094
 T1_MAX = 1.20
 T1_MIN = 0.60
+# Dove arriva t1 quando oltrepassa il valore giusto: sotto T1_M, quindi le due
+# facce si sovrappongono (di 0.10 a t1 = 0.85), prima di tornare a T1_M.
+T1_OVERSHOOT = 0.85
 
 PIVOT_NAME = "M_pivot"           # l'empty centrale: ruotandolo gira tutto
 Z_OUT = 0.45                     # di quanto le facce si staccano dal loro posto
@@ -206,36 +336,45 @@ FACE_B = 1
 # =============================================================================
 
 BEATS = [
-    ("giro1",         4.0),   # l'icosaedro fa un giro su se stesso; a meta' le
-                              # facce si allontanano un po' dal centro
-    ("via_le_altre",  1.2),   # tutte tranne la prima si rimpiccioliscono a zero
-    ("fase2",         1.5),   # arrivano i primi 6 raggi
-    ("fase3",         2.0),   # diventa 6 triangoli, girando di 120 gradi
-    ("fase4",         1.5),   # arrivano gli altri 6 raggi
-    ("fase5",         2.0),   # diventa 12 triangoli, altri 120 gradi
-    ("t1_su",         2.0),   # il grado di liberta': t1 sale al massimo
-    ("t1_giu",        2.5),   # ... e scende al minimo
-    ("entra_B",       1.5),   # compare la seconda faccia, gia' trasformata
-    ("avvicina",      1.5),   # le due facce si toccano sui triangoli di base
-    ("t1_giusto",     2.5),   # t1 torna al valore giusto: i bordi combaciano
-    ("separa",        1.5),   # tornano alla distanza di prima
-    ("entrano_tutte", 3.0),   # compaiono le altre 18, una dopo l'altra
-    ("giro2",         3.0),   # il poliedro gira con le facce ancora separate
-    ("chiusura",      2.0),   # le facce tornano alla distanza giusta...
-    ("giro3",         3.0),   # ... mentre il poliedro fa l'ultimo giro
+    ("comparsa",       1.5),  # l'icosaedro cresce da niente
+    ("fermo",          1.0),  # ... e resta fermo un secondo
+    ("giro1",          8.0),  # un giro lento; compaiono gli spigoli, e nella
+                              # seconda meta' le facce si staccano un po'
+    ("via_le_altre",   1.2),  # tutte tranne la prima si rimpiccioliscono a zero
+    ("fase2",          1.5),  # arrivano i primi 6 raggi
+    ("fase3",          2.0),  # diventa 6 triangoli
+    ("fase4",          1.5),  # arrivano gli altri 6 raggi
+    ("fase5",          2.0),  # diventa 12 triangoli
+    ("giro_ventaglio", 4.0),  # il ventaglio gira di 120 gradi sul proprio asse
+    ("t1_giu",         2.0),  # il grado di liberta': t1 scende al minimo
+    ("t1_su",          2.5),  # ... e sale al massimo
+    ("entra_B",        1.5),  # compare la seconda faccia, gia' trasformata
+    ("avvicina",       1.5),  # le due facce si toccano sui triangoli di base,
+                              # ma fra le spezzate resta una fessura
+    ("t1_oltre",       1.8),  # t1 scende oltre il valore giusto: sovrapposizione
+    ("t1_giusto",      1.0),  # t1 torna al valore giusto: i bordi combaciano
+    ("entrano_tutte",  3.0),  # compaiono le altre 18, gia' saldate: M si riforma
+    ("giro2",          2.0),  # M comincia a girare lentamente
+    ("stacca",         1.0),  # le facce si allontanano un po'
+    ("pausa",          1.0),  # ... restano cosi' un secondo
+    ("risalda",        1.0),  # ... e tornano al loro posto
+    ("spigoli_via",    1.0),  # gli spigoli spariscono
+    ("giro3",          8.0),  # l'ultimo giro
 ]
 
 # I giri del pivot centrale: (prima battuta, ultima battuta, giri).
 # Sono cumulativi, con interpolazione Bezier: ognuno parte da fermo e si ferma,
-# che e' l'ease in/out. L'ultimo copre due battute perche' la chiusura delle
-# facce e il giro finale devono succedere insieme.
+# che e' l'ease in/out. Un giro dura 8 secondi. Il secondo tratto va da giro2 a
+# giro3 senza fermarsi: M gira mentre le facce si staccano e si risaldano, e
+# finisce con l'ultimo giro.
 PIVOT_TURNS = [
     ("giro1", "giro1", 1.0),
-    ("giro2", "giro2", 1.0),
-    ("chiusura", "giro3", 1.0),
+    ("giro2", "giro3", 2.0),
 ]
 
 ENTER_RAMP_SECONDS = 0.6      # quanto ci mette una faccia a comparire
+WIRES_AFTER_SECONDS = 2.0     # dopo quanto, dall'inizio di giro1, compaiono gli spigoli
+WIRE_GROW_SECONDS   = 1.0     # quanto ci mettono a crescere (e a sparire)
 
 
 def _build_marks():
@@ -312,27 +451,73 @@ SPOKE_GROUP_1 = (0, 2, 4, 6, 8, 10)
 SPOKE_GROUP_2 = (1, 3, 5, 7, 9, 11)
 
 
-# Il canale t1: un solo viaggio, niente oscillazioni. Dal valore giusto al
-# massimo, poi al minimo; resta li' mentre entra la seconda faccia e le due si
-# avvicinano, e infine torna a T1_M, che e' il momento in cui i bordi combaciano.
+# Il canale t1: dal valore giusto al minimo, poi al massimo; resta li' mentre
+# entra la seconda faccia e le due si avvicinano -- sopra T1_M, quindi con la
+# fessura -- poi scende oltre T1_M fino alla sovrapposizione, e torna a T1_M,
+# che e' il momento in cui i bordi combaciano. Nel punto di inversione la
+# velocita' e' zero, come in un vero rimbalzo.
 T1_TRACK = Track([
-    (beat("t1_su")[0],     T1_M),
-    (beat("t1_su")[1],     T1_MAX),
+    (beat("t1_giu")[0],    T1_M),
     (beat("t1_giu")[1],    T1_MIN),
-    (beat("t1_giusto")[0], T1_MIN),
+    (beat("t1_su")[1],     T1_MAX),
+    (beat("t1_oltre")[0],  T1_MAX),
+    (beat("t1_oltre")[1],  T1_OVERSHOOT),
     (beat("t1_giusto")[1], T1_M),
 ])
 
-# La rotazione di ogni faccia sul proprio asse: 120 gradi mentre diventa 6
-# triangoli, altri 120 mentre diventa 12. Funziona perche' il ventaglio ha
-# simmetria ternaria: dopo 120 gradi e' indistinguibile da prima, quindi la
-# faccia resta al suo posto sull'icosaedro e la si puo' applicare a tutte e 20
-# senza preoccuparsi di quelle che in quel momento non si vedono.
+# La rotazione di ogni faccia sul proprio asse: 120 gradi, lenti, a ventaglio
+# formato. Funziona perche' il ventaglio ha simmetria ternaria: dopo 120 gradi
+# e' indistinguibile da prima, quindi la faccia resta al suo posto
+# sull'icosaedro e la si puo' applicare a tutte e 20 senza preoccuparsi di
+# quelle che in quel momento non si vedono. Durante la piegatura (fasi 3 e 5)
+# la faccia non gira: piegarsi e girare insieme davano un movimento convulso.
 SPIN_TRACK = Track([
-    (beat("fase3")[0], 0.0),
-    (beat("fase3")[1], 2.0 * math.pi / 3.0),
-    (beat("fase5")[0], 2.0 * math.pi / 3.0),
-    (beat("fase5")[1], 4.0 * math.pi / 3.0),
+    (beat("giro_ventaglio")[0], 0.0),
+    (beat("giro_ventaglio")[1], 2.0 * math.pi / 3.0),
+])
+
+# Gli spigoli: 0 = invisibili (cilindri e sferette di raggio zero), 1 = pieni.
+_WIRES_ON = beat("giro1")[0] + int(round(WIRES_AFTER_SECONDS * FPS))
+_WIRE_RAMP = int(round(WIRE_GROW_SECONDS * FPS))
+WIRE_TRACK = Track([
+    (_WIRES_ON, 0.0),
+    (_WIRES_ON + _WIRE_RAMP, 1.0),
+    (beat("spigoli_via")[0], 1.0),
+    (beat("spigoli_via")[1], 0.0),
+])
+
+# Quanto la camera si e' abbassata: 0 = CAMERA_DIRECTION, 1 = CAMERA_LOWER_DEG
+# piu' in basso. Comincia subito e finisce quando il ventaglio di 12 e' formato.
+LOWER_TRACK = Track([
+    (FRAME_START, 0.0),
+    (beat("fase5")[1], 1.0),
+])
+
+
+# Che cosa inquadra la camera. FOLLOW: 0 = il centro del poliedro, 1 = la
+# faccia (o la coppia); PAIR: 0 = la faccia A, 1 = le facce A e B insieme.
+# DISTANCE: quanto la camera sta lontana da quello che inquadra.
+#
+# Il passaggio alla coppia finisce quando B *comincia* a comparire: se la
+# camera si spostasse mentre B cresce, B nascerebbe fuori dall'inquadratura.
+_PAIR_START = beat("entra_B")[0] - int(round(PAIR_LEAD * FPS))
+FOLLOW_TRACK = Track([
+    (beat("via_le_altre")[0], 0.0),
+    (beat("via_le_altre")[1], 1.0),
+    (beat("entrano_tutte")[0], 1.0),
+    (beat("entrano_tutte")[1], 0.0),
+])
+PAIR_TRACK = Track([
+    (_PAIR_START, 0.0),
+    (beat("entra_B")[0], 1.0),
+])
+DISTANCE_TRACK = Track([
+    (beat("via_le_altre")[0], CAMERA_ICO),
+    (beat("via_le_altre")[1], CAMERA_NEAR),
+    (_PAIR_START, CAMERA_NEAR),
+    (beat("entra_B")[0], CAMERA_PAIR),
+    (beat("entrano_tutte")[0], CAMERA_PAIR),
+    (beat("entrano_tutte")[1], CAMERA_FAR),
 ])
 
 
@@ -340,7 +525,7 @@ PARAM_DECIMALS = 7      # a quante cifre si arrotondano i parametri
 
 
 def params_at(frame):
-    """(t1, s, g1, g2) del fotogramma. E' l'unica fonte dei quattro parametri.
+    """(t1, s, g1, g2, w) del fotogramma. E' l'unica fonte dei parametri.
 
     L'arrotondamento serve a far coincidere i fotogrammi che hanno la stessa
     forma, cosi' che condividano una sola shape key: senza, due valori che
@@ -353,7 +538,8 @@ def params_at(frame):
     return (round(T1_TRACK(frame), PARAM_DECIMALS),
             round(S_TRACK(frame), PARAM_DECIMALS),
             round(G1_TRACK(frame), PARAM_DECIMALS),
-            round(G2_TRACK(frame), PARAM_DECIMALS))
+            round(G2_TRACK(frame), PARAM_DECIMALS),
+            round(WIRE_TRACK(frame), PARAM_DECIMALS))
 
 
 def fan_params_at(frame):
@@ -379,11 +565,11 @@ def z_keys():
         ((g0 + g1) // 2, 0.0),          # "a meta' della rotazione"
         (g1, Z_OUT),
         (beat("avvicina")[0], Z_OUT),
-        (beat("avvicina")[1], 0.0),     # A e B si toccano sui triangoli di base
-        (beat("separa")[0], 0.0),
-        (beat("separa")[1], Z_OUT),
-        (beat("chiusura")[0], Z_OUT),
-        (beat("chiusura")[1], 0.0),     # il poliedro si chiude
+        (beat("avvicina")[1], 0.0),     # A e B si toccano: da qui restano al loro posto
+        (beat("stacca")[0], 0.0),
+        (beat("stacca")[1], Z_OUT),     # M si apre un po'...
+        (beat("risalda")[0], Z_OUT),
+        (beat("risalda")[1], 0.0),      # ... e si richiude
     ]
 
 
@@ -420,6 +606,51 @@ def scale_keys(face):
     step = (f1 - f0 - ramp) / max(1, len(order) - 1)
     start = f0 + int(round(rank * step))
     return keys + [(start, 0.0), (start + ramp, 1.0)]
+
+
+def shared_side(face, other):
+    """Il lato della spezzata di `face` (0, 1 o 2) che sta sullo spigolo in
+    comune con `other`. Il lato i va dall'angolo i all'angolo i+1, e l'angolo
+    i del ventaglio e' posato sul vertice ico.faces[face][i]
+    (_icosahedron_seats): quindi il lato e' quello i cui due vertici sono i
+    due che le facce hanno in comune."""
+    ico = geometry.Polyhedron.ico
+    common = set(ico.faces[face]) & set(ico.faces[other])
+    for i in range(extended_face.N_EDGES):
+        corners = {ico.faces[face][i], ico.faces[face][(i + 1) % extended_face.N_EDGES]}
+        if corners == common:
+            return i
+    raise ValueError(f"le facce {face} e {other} non hanno uno spigolo in comune")
+
+
+def mesh_side(side, frame):
+    """L'indice nella mesh del lato che al fotogramma `frame` occupa la
+    posizione del lato `side` (quella di shared_side, a rotazione zero).
+
+    A ventaglio formato la faccia gira sul proprio asse di 120 gradi
+    (SPIN_TRACK): il ventaglio ritorna su se stesso, ma l'angolo i della mesh
+    finisce dove c'era l'angolo i+1. Senza questa correzione si accenderebbe
+    un lato esterno invece di quello in comune."""
+    steps = int(round(SPIN_TRACK(frame) / (2.0 * math.pi / 3.0)))
+    return (side - steps) % extended_face.N_EDGES
+
+
+def glow_keys():
+    """I keyframe dei lati accesi: {(faccia, lato della mesh): [(frame, valore)]},
+    con valore 0 = spento e 1 = acceso.
+
+    Si accendono i lati in comune di A e B, su tutte e due, da quando le due
+    facce si avvicinano fino a quando entrano le altre."""
+    ramp = GLOW_RAMP_SECONDS * FPS
+    first, last = beat("avvicina")[0], beat("entrano_tutte")[0]
+    contact = [(first, 0.0), (first + ramp, 1.0), (last, 1.0), (last + ramp, 0.0)]
+    keys = {}
+    for face, other in ((FACE_A, FACE_B), (FACE_B, FACE_A)):
+        side = mesh_side(shared_side(face, other), first)
+        if mesh_side(shared_side(face, other), last) != side:
+            raise ValueError("la faccia gira sul proprio asse mentre il lato in comune e' acceso")
+        keys[(face, side)] = contact
+    return keys
 
 
 def pivot_keys():
@@ -600,25 +831,26 @@ def vertex_radius(k, g1, g2):
     return VERTEX_RADIUS_HIDDEN + (VERTEX_RADIUS - VERTEX_RADIUS_HIDDEN) * g
 
 
-def wire_shape(t1, s, g1, g2):
+def wire_shape(t1, s, g1, g2, w=1.0):
     """Il bordo del ventaglio: 24 cilindri e 13 sferette in un solo MeshData,
     con numero di vertici e facce sempre uguale.
 
     g1 e g2 sono indipendenti da s: e' questo che permette di far arrivare gli
-    spigoli a forma ferma e poi piegare la faccia a spigoli fermi."""
+    spigoli a forma ferma e poi piegare la faccia a spigoli fermi. `w` scala
+    tutti i raggi: 0 = spigoli invisibili, 1 = pieni (WIRE_TRACK)."""
     P = np.asarray(fan_shape(t1, s).vertices, dtype=float)
     apex = P[extended_face.N_TRIANGLES]
     n = extended_face.N_TRIANGLES
 
     out = MeshData()
     for k in range(n):                                  # la spezzata esterna
-        out.append(_tube(P[k], P[(k + 1) % n], TUBE_RADIUS, caps=False))
+        out.append(_tube(P[k], P[(k + 1) % n], TUBE_RADIUS * w, caps=False))
     for k in range(n):                                  # i raggi, che crescono da P0
         g = g1 if k in SPOKE_GROUP_1 else g2
-        out.append(_tube(apex, apex + g * (P[k] - apex), spoke_radius(g), caps=True))
+        out.append(_tube(apex, apex + g * (P[k] - apex), spoke_radius(g) * w, caps=True))
     for k in range(n):                                  # i vertici della spezzata
-        out.append(_sphere(P[k], vertex_radius(k, g1, g2)))
-    out.append(_sphere(apex, VERTEX_RADIUS * g1))       # il mozzo, appare coi raggi
+        out.append(_sphere(P[k], vertex_radius(k, g1, g2) * w))
+    out.append(_sphere(apex, VERTEX_RADIUS * g1 * w))   # il mozzo, appare coi raggi
     return out
 
 
@@ -631,22 +863,37 @@ def wire_face_attributes():
     del cilindro si sfoca. Piatto, l'orlo resta netto e il fianco conserva la
     normale radiale.
 
-    Il materiale distingue gli spigoli della spezzata (e le loro sferette) dai
-    raggi che passano per P0 (e dal mozzo)."""
+    Il materiale (si veda WIRE_SLOTS) distingue i tre lati della spezzata --
+    ogni lato e' fatto di 4 segmenti e si accende da solo -- dai raggi che
+    passano per P0 (e dal mozzo). Le sferette dei punti interni di un lato
+    stanno col lato; quelle dei tre angoli, che sono di due lati, hanno un
+    materiale proprio che non si accende."""
     n = extended_face.N_TRIANGLES
+    per_side = extended_face.SEG_PER_EDGE
     smooth, material = [], []
 
-    for _ in range(n):                                  # spezzata: senza tappi
+    for k in range(n):                                  # spezzata: senza tappi
         smooth += [True] * TUBE_SIDES
-        material += [0] * TUBE_SIDES
+        material += [k // per_side] * TUBE_SIDES
     for _ in range(n):                                  # raggi: fianco + 2 tappi
         smooth += [True] * TUBE_SIDES + [False] * (2 * TUBE_SIDES)
-        material += [1] * (3 * TUBE_SIDES)
+        material += [SLOT_SPOKE] * (3 * TUBE_SIDES)
     faces_per_sphere = SPHERE_SEGMENTS * SPHERE_RINGS
     for k in range(n + 1):                              # sferette, mozzo per ultimo
         smooth += [True] * faces_per_sphere
-        material += [0 if k < n else 1] * faces_per_sphere
+        if k == n:
+            slot = SLOT_SPOKE
+        elif k % per_side == 0:
+            slot = SLOT_CORNER
+        else:
+            slot = k // per_side
+        material += [slot] * faces_per_sphere
     return smooth, material
+
+
+# gli slot di materiale della mesh del bordo: 0, 1, 2 sono i tre lati
+SLOT_SPOKE  = 3
+SLOT_CORNER = 4
 
 
 def _icosahedron_seats():
@@ -729,6 +976,7 @@ def clear_previous_run():
     for name in (MESH_NAME, WIRE_MESH_NAME):
         if name in bpy.data.meshes:
             bpy.data.meshes.remove(bpy.data.meshes[name])
+    KIT.clear_previous_run()            # camera, luce, fondo e materiali MS_
 
 
 def _action_fcurves(datablock):
@@ -784,7 +1032,12 @@ def create_pivot(collection):
     for frame, angle in pivot_keys():
         obj.rotation_euler = (0.0, 0.0, angle)
         obj.keyframe_insert("rotation_euler", index=2, frame=frame)
-    _set_interpolation(obj, 'BEZIER', "rotation_euler")
+    # la comparsa: tutto il poliedro cresce da niente
+    for frame, value in ((beat("comparsa")[0], 0.0), (beat("comparsa")[1], 1.0)):
+        obj.scale = (value, value, value)
+        obj.keyframe_insert("scale", frame=frame)
+    obj.scale = (1.0, 1.0, 1.0)
+    _set_interpolation(obj, 'BEZIER')
     return obj
 
 
@@ -821,7 +1074,7 @@ def create_fans(collection, seats, mesh):
 
     Tre canali animati, tutti ritoccabili a mano nel Graph Editor:
       * la Z locale, cioe' l'allontanamento dal posto (uguale per tutti);
-      * la rotazione sul proprio asse, 120 gradi per volta (uguale per tutti);
+      * la rotazione sul proprio asse, 120 gradi (uguale per tutti);
       * la scala, che e' il modo in cui una faccia compare e sparisce (sua).
     """
     z = z_keys()
@@ -836,14 +1089,14 @@ def create_fans(collection, seats, mesh):
         # matrice dell'empty, che annullerebbe proprio quel movimento.
         obj.matrix_parent_inverse = mathutils.Matrix.Identity(4)
         obj.rotation_mode = 'XYZ'
+        obj.visible_shadow = CAST_SHADOWS
 
         obj.location = (0.0, 0.0, 0.0)
         for frame, value in z:
             obj.location = (0.0, 0.0, value)
             obj.keyframe_insert("location", index=2, frame=frame)
 
-        for frame in (beat("fase3")[0], beat("fase3")[1],
-                      beat("fase5")[0], beat("fase5")[1]):
+        for frame, _ in SPIN_TRACK.keys:
             obj.rotation_euler = (0.0, 0.0, SPIN_TRACK(frame))
             obj.keyframe_insert("rotation_euler", index=2, frame=frame)
 
@@ -872,6 +1125,7 @@ def create_wires(collection, fans, mesh):
         collection.objects.link(obj)
         obj.parent = fan
         obj.matrix_parent_inverse = mathutils.Matrix.Identity(4)
+        obj.visible_shadow = CAST_SHADOWS
         wires.append(obj)
     return wires
 
@@ -959,17 +1213,180 @@ def _check_reproduces_M():
     return worst
 
 
-def _material(name, color):
-    """Materiale col colore dato. Il colore va anche in `diffuse_color`, che e'
-    quello che mostra la vista Solid: cosi' i pezzi si distinguono senza dover
-    passare a Material Preview."""
-    mat = bl_utils.get_or_create_material(name)
-    mat.diffuse_color = color
-    if mat.use_nodes:
-        node = next((n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
-        if node is not None:
-            node.inputs["Base Color"].default_value = color
-    return mat
+KIT = m_scene.Kit(PREFIX, COLLECTION_NAME, ASSETS_DIR)
+RIG = m_scene.CameraRig('PERSP', CAMERA_FAR, 36.0, RESOLUTION)
+
+
+def camera_direction(frame=FRAME_START):
+    """Il versore dal punto inquadrato verso la camera: CAMERA_DIRECTION,
+    abbassato di CAMERA_LOWER_DEG * LOWER_TRACK(frame) a parita' di azimut."""
+    d = mathutils.Vector(CAMERA_DIRECTION).normalized()
+    azimuth = math.atan2(d.y, d.x)
+    elevation = math.asin(d.z) - math.radians(CAMERA_LOWER_DEG) * LOWER_TRACK(frame)
+    return mathutils.Vector((math.cos(elevation) * math.cos(azimuth),
+                             math.cos(elevation) * math.sin(azimuth),
+                             math.sin(elevation)))
+
+
+def camera_rotation(frame=FRAME_START):
+    """La rotazione della camera: guarda verso -camera_direction(frame), con
+    l'alto dell'immagine verso +Z del mondo."""
+    return camera_direction(frame).to_track_quat('Z', 'Y')
+
+
+def light_direction():
+    """LIGHT_IN_CAMERA in coordinate mondo, con la camera com'e' all'inizio.
+    La luce resta ferma nel mondo mentre la camera si abbassa: e' il
+    poliedro che si guarda da un'altra parte, non la luce che si sposta."""
+    return camera_rotation().to_matrix() @ mathutils.Vector(LIGHT_IN_CAMERA)
+
+
+def _fcurve_value(obj, data_path, index, frame, default):
+    for fcurve in bl_anim.action_fcurves(obj):
+        if fcurve.data_path == data_path and fcurve.array_index == index:
+            return fcurve.evaluate(frame)
+    return default
+
+
+class FaceTracker:
+    """Dove sta una faccia in un fotogramma, letto dalle stesse fcurve che
+    usa Blender (rotazione del pivot, allontanamento e rotazione del
+    ventaglio) e dalla stessa forma (params_at): e' la faccia vera, non una
+    stima. La scala si ignora apposta: per la camera conta dove la faccia
+    *sara'* quando c'e', non che stia ancora comparendo."""
+
+    def __init__(self, pivot, fans):
+        self.pivot = pivot
+        self.fans = fans
+        self._shapes = {}
+
+    def _shape(self, t1, s):
+        key = (t1, s)
+        if key not in self._shapes:
+            self._shapes[key] = [mathutils.Vector(v) for v in fan_shape(t1, s).vertices]
+        return self._shapes[key]
+
+    def points(self, face, frame):
+        t1, s = fan_params_at(frame)
+        fan = self.fans[face]
+        angle = _fcurve_value(self.pivot, "rotation_euler", 2, frame, 0.0)
+        z = _fcurve_value(fan, "location", 2, frame, 0.0)
+        spin = _fcurve_value(fan, "rotation_euler", 2, frame, 0.0)
+        M = (mathutils.Matrix.Rotation(angle, 4, 'Z')
+             @ mathutils.Matrix.Translation(seat_location(face, t1))
+             @ SEATS[face][0].to_matrix().to_4x4()
+             @ mathutils.Matrix.Translation((0.0, 0.0, z))
+             @ mathutils.Matrix.Rotation(spin, 4, 'Z'))
+        return [M @ v for v in self._shape(t1, s)]
+
+
+def framing_center(points, frame):
+    """Il punto da tenere al centro dell'inquadratura: il centro del
+    rettangolo che i punti occupano visti dalla camera (sugli assi destra e
+    alto della camera), alla loro profondita' media. Si usa per la coppia A+B;
+    per la faccia sola si usa P0 (si veda camera_keys)."""
+    R = camera_rotation(frame).to_matrix()
+    right, up, back = R.col[0], R.col[1], R.col[2]
+    xs = [p.dot(right) for p in points]
+    ys = [p.dot(up) for p in points]
+    ds = [p.dot(back) for p in points]
+    return (right * (min(xs) + max(xs)) / 2 + up * (min(ys) + max(ys)) / 2
+            + back * (sum(ds) / len(ds)))
+
+
+def camera_keys(tracker, frames):
+    """(posizioni, rotazioni) della camera, un keyframe per fotogramma, gia'
+    raccordato: il punto inquadrato (FOLLOW_TRACK, PAIR_TRACK) piu'
+    DISTANCE_TRACK lungo camera_direction(frame).
+
+    Della faccia A si tiene al centro P0, il vertice centrale: sta sull'asse
+    del ventaglio, quindi non si muove quando la faccia gira, e si piega
+    restando dov'e'. Il centro del rettangolo occupato dalla faccia invece
+    cambia quando la faccia gira, e la camera che lo rincorreva oscillava."""
+    apex = extended_face.N_TRIANGLES
+    locations, rotations = [], []
+    for f in frames:
+        follow, pair = FOLLOW_TRACK(f), PAIR_TRACK(f)
+        target = mathutils.Vector((0.0, 0.0, 0.0))
+        if follow > 0.0:
+            a = tracker.points(FACE_A, f)
+            focus = a[apex]
+            if pair > 0.0:
+                focus = focus.lerp(framing_center(a + tracker.points(FACE_B, f), f), pair)
+            target = target.lerp(focus, follow)
+        locations.append((f, tuple(target + camera_direction(f) * DISTANCE_TRACK(f))))
+        rotations.append((f, tuple(camera_rotation(f))))
+    return locations, rotations
+
+
+def build_camera(tracker, frames):
+    cam = RIG.build(KIT, mathutils.Vector((0.0, 0.0, 0.0)), clip_end=CAMERA_FAR + BACKGROUND_DEPTH + 10.0)
+    cam.data.lens = CAMERA_LENS
+    cam.rotation_mode = 'QUATERNION'
+    locations, rotations = camera_keys(tracker, frames)
+    bl_anim.key_value(cam, "location", locations, interpolation='LINEAR')
+    bl_anim.key_value(cam, "rotation_quaternion", rotations, interpolation='LINEAR')
+    m_scene.build_background(KIT, RIG, cam, CAMERA_LENS, BACKGROUND_DEPTH,
+                             BACKGROUND_CORNERS_SRGB, BACKGROUND_BLEED)
+    return cam
+
+
+def wire_materials():
+    """I materiali del bordo, nell'ordine degli slot: i tre lati (che si
+    accendono con glow0, glow1, glow2), i raggi, gli angoli."""
+    sides = [m_scene.wire_material(KIT, f"edge_side{i}", EDGE_COLOR,
+                                   glow_property=f"glow{i}", glow_color=GLOW_COLOR,
+                                   glow_strength=GLOW_STRENGTH)
+             for i in range(extended_face.N_EDGES)]
+    spoke = m_scene.wire_material(KIT, "spoke", SPOKE_COLOR)
+    corner = m_scene.wire_material(KIT, "edge_corner", EDGE_COLOR)
+    return sides + [spoke, corner]
+
+
+def apply_glow(wires):
+    for (face, side), keys in glow_keys().items():
+        bl_anim.key_value(wires[face], f'["glow{side}"]', keys)
+
+
+def check_framing(tracker, cam, frames):
+    """Quanto la faccia A (e B, quando si vede) si avvicina al bordo
+    dell'immagine mentre la camera la segue: il minimo margine, in frazione
+    dell'inquadratura, sui fotogrammi in cui FOLLOW_TRACK e' 1. Negativo vuol
+    dire che una faccia esce dall'inquadratura."""
+    from bpy_extras.object_utils import world_to_camera_view as w2c
+    scene = bpy.context.scene
+    worst = 1.0
+    for f in frames[::4]:
+        if FOLLOW_TRACK(f) < 1.0:
+            continue
+        pts = tracker.points(FACE_A, f)
+        if _fcurve_value(tracker.fans[FACE_B], "scale", 0, f, 0.0) > 1e-6:
+            pts = pts + tracker.points(FACE_B, f)
+        scene.frame_set(f)
+        for p in pts:
+            q = w2c(scene, cam, p)
+            worst = min(worst, q.x, 1.0 - q.x, q.y, 1.0 - q.y)
+    return worst
+
+
+def check_final_framing(tracker, cam, frames):
+    """Lo stesso controllo di check_framing, sulle 20 facce, da quando M si e'
+    riformata alla fine: (margine minimo, fotogramma). Il punto critico e'
+    quando le facce sono staccate."""
+    from bpy_extras.object_utils import world_to_camera_view as w2c
+    scene = bpy.context.scene
+    worst = (1.0, None)
+    for f in frames:
+        if f < beat("entrano_tutte")[1] or (f - frames[0]) % 4:
+            continue
+        scene.frame_set(f)
+        for face in range(len(SEATS)):
+            for p in tracker.points(face, f):
+                q = w2c(scene, cam, p)
+                m = min(q.x, 1.0 - q.x, q.y, 1.0 - q.y)
+                if m < worst[0]:
+                    worst = (m, f)
+    return worst
 
 
 def _make_mesh(name, md, materials, smooth=None, material_index=None):
@@ -1004,12 +1421,44 @@ def build():
     collection = bpy.data.collections.new(COLLECTION_NAME)
     scene.collection.children.link(collection)
 
-    mesh = _make_mesh(MESH_NAME, fan_shape(*fan_params_at(FRAME_START)),
-                      [_material(MATERIAL_NAME, FAN_COLOR)])
+    KIT.collection = collection
+    scene.render.resolution_x, scene.render.resolution_y = RESOLUTION
+    if USE_STANDARD_VIEW:
+        scene.view_settings.view_transform = 'Standard'
+        scene.view_settings.look = 'None'
+    if WORLD == 'SKY':
+        toward_sun = -light_direction()
+        m_scene.setup_sky_world(KIT, math.radians(SKY_SUN_ELEVATION),
+                                m_scene.sky_rotation(toward_sun), SKY_STRENGTH)
+    elif WORLD == 'FLAT':
+        m_scene.setup_world(KIT, m_scene.mean_srgb(BACKGROUND_CORNERS_SRGB.values()), AMBIENT)
+        m_scene.build_light(KIT, light_direction(), LIGHT_STRENGTH)
+    else:
+        raise ValueError(f"WORLD dev'essere 'SKY' o 'FLAT', non {WORLD!r}")
+    m_scene.setup_glare(KIT, scene, GLARE_THRESHOLD, GLARE_STRENGTH, GLARE_SIZE)
+
+    # le facce: il materiale dipinto di M, con la stessa UV (i 12 triangoli del
+    # ventaglio sono equilateri come quelli di M, e l'apice e' il primo vertice)
+    face_img = KIT.load_image(m_scene.FACE_TEXTURE_FILE)
+    uvs = m_scene.face_uvs(face_img, m_scene.FACE_TEXTURE_UV_PX, m_scene.FACE_TEXTURE_UV_INSET)
+    if FACE_SHADING == 'TEXTURE':
+        face_mat = m_scene.physical_face_material(
+            KIT, face_img, FACE_ROUGHNESS,
+            uniform_color=m_scene.texture_mean_color(face_img, uvs))
+        t0 = beat("fase5")[1]
+        bl_anim.key_value(face_mat.node_tree, m_scene.TEXTURE_MIX_PATH, [
+            (FRAME_START, 0.0), (t0, 0.0),
+            (t0 + int(round(TEXTURE_FADE_SECONDS * FPS)), 1.0)])
+    elif FACE_SHADING == 'PAINTED':
+        face_mat = m_scene.painted_face_material(KIT, face_img, uvs, m_scene.PAINTING_PALETTE,
+                                                 light_direction(), FACE_GRAIN)
+    else:
+        raise ValueError(f"FACE_SHADING dev'essere 'TEXTURE' o 'PAINTED', non {FACE_SHADING!r}")
+    mesh = _make_mesh(MESH_NAME, fan_shape(*fan_params_at(FRAME_START)), [face_mat])
+    bl_utils.set_triangle_uvs(mesh, uvs)
     wire_smooth, wire_material = wire_face_attributes()
     wire_mesh = _make_mesh(WIRE_MESH_NAME, wire_shape(*params_at(FRAME_START)),
-                           [_material(EDGE_MATERIAL, EDGE_COLOR),
-                            _material(SPOKE_MATERIAL, SPOKE_COLOR)],
+                           wire_materials(),
                            smooth=wire_smooth, material_index=wire_material)
 
     pivot = create_pivot(collection)
@@ -1018,6 +1467,12 @@ def build():
     wires = create_wires(collection, fans, wire_mesh)
     blocks = bake_shapes(fans[0], frames, fan_params_at, fan_shape)
     wblocks = bake_shapes(wires[0], frames, params_at, wire_shape)
+    apply_glow(wires)
+
+    tracker = FaceTracker(pivot, fans)
+    cam = build_camera(tracker, frames)
+    margin = check_framing(tracker, cam, frames)
+    final_margin, final_frame = check_final_framing(tracker, cam, frames)
 
     scene.frame_set(FRAME_START)
 
@@ -1030,11 +1485,19 @@ def build():
     print(f"[M_story] shape key: {len(blocks)} forme del ventaglio e "
           f"{len(wblocks)} del bordo, su {len(frames)} fotogrammi; keyframe di "
           f"posizione degli empty su {len(changing)} fotogrammi")
-    print(f"[M_story] t1: {T1_M:.6f} (M) -> {T1_MAX} -> {T1_MIN} -> {T1_M:.6f}; "
+    print(f"[M_story] t1: {T1_M:.6f} (M) -> {T1_MIN} -> {T1_MAX} -> {T1_OVERSHOOT} -> {T1_M:.6f}; "
           f"pivot: {sum(t for _, _, t in PIVOT_TURNS):.0f} giri in "
           f"{len(PIVOT_TURNS)} riprese")
     print(f"[M_story] con s=0, t1=T1_M, z=0 le 20 facce ricostruiscono M: "
           f"scarto {_check_reproduces_M():.2e}")
+    print(f"[M_story] t1 per il contatto: {T1_MAX} (fessura) -> {T1_OVERSHOOT} "
+          f"(sovrapposizione) -> {T1_M:.6f}; lati in comune (indice nella mesh, dopo il "
+          f"giro di 120 gradi): A {mesh_side(shared_side(FACE_A, FACE_B), beat('avvicina')[0])}, "
+          f"B {mesh_side(shared_side(FACE_B, FACE_A), beat('avvicina')[0])}")
+    print(f"[M_story] camera: distanza {CAMERA_ICO} / {CAMERA_NEAR} / {CAMERA_PAIR} / {CAMERA_FAR}, "
+          f"focale {CAMERA_LENS}; mentre segue la faccia, margine minimo dal bordo "
+          f"dell'immagine {margin:.1%}; su M intera, alla fine, {final_margin:.1%} "
+          f"(fotogramma {final_frame})")
     print("[M_story] nessun handler registrato: a render time non gira Python")
     return pivot, fans, seats, wires, blocks, wblocks
 

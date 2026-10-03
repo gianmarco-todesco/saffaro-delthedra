@@ -172,16 +172,22 @@ def key_value(datablock, data_path, keys, interpolation='BEZIER'):
     """Keyframe di una proprieta' scalare qualsiasi del datablock: `keys` e'
     una lista di (frame, valore), `data_path` e' relativo al datablock, per
     esempio 'ortho_scale' sui dati di una camera, 'modifiers["Wireframe"].thickness'
-    su un oggetto, 'nodes["Mix"].inputs[0].default_value' su un node tree."""
+    su un oggetto, 'nodes["Mix"].inputs[0].default_value' su un node tree, o
+    '["glow"]' per una proprieta' personalizzata (che viene creata se manca)."""
     for frame, value in keys:
-        datablock.path_resolve(data_path)            # errore chiaro se il path e' sbagliato
+        if not data_path.startswith('["'):
+            datablock.path_resolve(data_path)        # errore chiaro se il path e' sbagliato
         _assign(datablock, data_path, value)
         datablock.keyframe_insert(data_path, frame=int(round(frame)))
     set_interpolation(datablock, interpolation, (data_path,))
 
 
 def _assign(datablock, data_path, value):
-    """datablock.<data_path> = value, per un data_path con indici e chiavi."""
+    """datablock.<data_path> = value, per un data_path con indici e chiavi, o
+    per una proprieta' personalizzata ('["nome"]')."""
+    if data_path.startswith('["') and data_path.endswith('"]'):
+        datablock[data_path[2:-2]] = value
+        return
     head, _, attr = data_path.rpartition(".")
     owner = datablock.path_resolve(head) if head else datablock
     setattr(owner, attr, value)
