@@ -244,3 +244,52 @@ class MeshData:
         self.faces.extend([i + offset for i in face] for face in other.faces)
         return self
 
+
+# =============================================================================
+# POLIEDRI CONVESSI: PIANI DELLE FACCE E CONTENIMENTO
+# =============================================================================
+
+def face_planes(poly):
+    """Per ogni faccia di un poliedro convesso centrato nell'origine: normale
+    uscente (versore) e distanza del suo piano dall'origine. Restituisce due
+    array numpy (F, 3) e (F,).
+
+    Il verso della normale viene rimesso a posto confrontandolo col baricentro
+    della faccia, invece di fidarsi dell'ordine dei vertici: la funzione serve a
+    misurare un contenimento, e una sola faccia girata al contrario darebbe una
+    scala sbagliata senza che nulla lo segnali.
+    """
+    verts = np.asarray([v.tup() for v in poly.vertices], dtype=float)
+    normals, dists = [], []
+    for face in poly.faces:
+        p = verts[list(face)]
+        n = np.cross(p[1] - p[0], p[2] - p[0])
+        n = n / np.linalg.norm(n)
+        if n @ p.mean(axis=0) < 0.0:
+            n = -n
+        normals.append(n)
+        dists.append(float(n @ p[0]))
+    return np.asarray(normals), np.asarray(dists)
+
+
+def enclosing_scale(points, poly):
+    """Il piu' piccolo fattore k per cui k*poly contiene tutti i `points`.
+
+    `poly` dev'essere convesso e centrato nell'origine: e' l'intersezione dei
+    semispazi n_i . x <= d_i, e scalarlo di k scala i d_i. Il k minimo e'
+    percio' il massimo, su tutti i punti e tutte le facce, di (n_i . p) / d_i.
+    Si passa dai piani e non dal raggio massimo dei punti perche' il risultato
+    resti giusto qualunque sia la faccia (o lo spigolo) che tocca per prima.
+    """
+    P = np.asarray(points, dtype=float).reshape(-1, 3)
+    normals, dists = face_planes(poly)
+    return float(((P @ normals.T) / dists).max())
+
+
+def polyhedron_mesh(poly, scale=1.0):
+    """MeshData del poliedro, scalato di `scale`. Le facce si riportano tali e
+    quali, quindi l'orientamento e' quello di `poly`."""
+    md = MeshData()
+    md.vertices = [(v * scale).tup() for v in poly.vertices]
+    md.faces = [list(f) for f in poly.faces]
+    return md

@@ -3,7 +3,7 @@
 Script "main" da eseguire dentro **Blender**. Non sono importabili come moduli:
 sono punti d'ingresso che costruiscono/animano una scena.
 
-Le librerie condivise (`geometry`, `extended_face`, `bl_utils`) stanno in
+Le librerie condivise (`geometry`, `extended_face`, `pieces`, `bl_utils`, `bl_anim`, `m_scene`) stanno in
 [`../libs`](../libs) e vengono coperte dai test in [`../../test`](../../test).
 
 ## Come si esegue uno script in Blender
@@ -54,5 +54,10 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `two_fans.py`      | due facce estese saldate su uno spigolo              |
 | `20-fans.py`       | le 20 facce estese sull'icosaedro (poliedro M)       |
 | `20-fans-bis.py`   | variante con animazione dei 20 ventagli              |
+| `explode_M.py`     | M come 240 istanze di un solo triangolo, animate dal poliedro a una griglia piana |
+| `M_ico.py`         | M dentro l'icosaedro-anima ingrandito fino a contenerlo: mostra che hanno la stessa simmetria |
+| `M_story.py`       | l'animazione completa (icosaedro -> ventaglio -> M), tutta bakerata in keyframe e shape key: nessun handler, quindi Render Animation non crasha |
+| `M_video.py`       | il video: dal quadro di Saffaro a M, che gira dentro l'icosaedro ed esplode nei 240 triangoli allineati per contarli; usa `../../../assets` (m.jpg, m2face_texture.png) |
+| `M_video2.py`      | il secondo video: fondo scuro sfumato fra i quattro angoli, M nella posa del quadro che gira, l'icosaedro, M che sparisce e ricompare, l'esplosione |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).

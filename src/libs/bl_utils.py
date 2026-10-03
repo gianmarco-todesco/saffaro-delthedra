@@ -137,3 +137,58 @@ def set_parent(child, parent):
     # keep_transform: l'oggetto non "salta" quando gli assegni il parent
     child.parent = parent
     child.matrix_parent_inverse = parent.matrix_world.inverted()
+
+
+def set_material_look(name, rgba, alpha=1.0, roughness=0.4):
+    """Crea (o riprende) il materiale e gli da' colore.
+
+    Il colore viene riscritto a ogni corsa: il materiale appartiene allo
+    script che lo chiama, non all'utente. Se vuoi ritoccarlo a mano, rinominalo.
+
+    Oltre al Base Color si imposta anche `diffuse_color`, che e' quello che la
+    vista Solid mostra: cosi' gli oggetti si distinguono subito, senza dover
+    passare a Material Preview.
+    """
+    mat = get_or_create_material(name)
+    mat.diffuse_color = (rgba[0], rgba[1], rgba[2], alpha)
+
+    node = None
+    if mat.node_tree is not None:
+        node = next((n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+    if node is None:
+        return mat                      # materiale senza nodi: basta diffuse_color
+
+    node.inputs["Base Color"].default_value = (rgba[0], rgba[1], rgba[2], 1.0)
+    if "Roughness" in node.inputs:
+        node.inputs["Roughness"].default_value = roughness
+    if alpha < 1.0 and "Alpha" in node.inputs:
+        node.inputs["Alpha"].default_value = alpha
+        set_blended(mat)
+    return mat
+
+
+def set_blended(mat):
+    """Rende il materiale trasparente in EEVEE. Il nome della proprieta' cambia
+    con la versione: fino a 4.1 blend_method, da 4.2 surface_render_method."""
+    if hasattr(mat, "blend_method"):
+        mat.blend_method = 'BLEND'
+    if hasattr(mat, "surface_render_method"):
+        mat.surface_render_method = 'BLENDED'
+
+
+def set_triangle_uvs(mesh, uvs, layer_name="UVMap"):
+    """Stessa UV su tutti i triangoli della mesh: il k-esimo vertice di ogni
+    faccia (nell'ordine in cui la faccia lo elenca) riceve uvs[k].
+
+    E' cosi' che una texture disegnata su un triangolo compare identica, e con
+    lo stesso orientamento, su tutte le facce. La UV sta sui loop, quindi
+    sopravvive a un merge_by_distance fatto dopo.
+    """
+    layer = mesh.uv_layers.get(layer_name) or mesh.uv_layers.new(name=layer_name)
+    for poly in mesh.polygons:
+        if poly.loop_total != len(uvs):
+            raise ValueError(f"faccia {poly.index}: {poly.loop_total} vertici, "
+                             f"ma {len(uvs)} coordinate UV")
+        for k, li in enumerate(poly.loop_indices):
+            layer.data[li].uv = uvs[k]
+    return layer

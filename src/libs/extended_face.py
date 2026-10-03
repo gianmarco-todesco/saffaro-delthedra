@@ -203,6 +203,18 @@ def find_closing_parameter(lo=None, hi=None, iters=100):
     return 0.5 * (lo + hi)
 
 
+def core_scale(phi=PHI_CLOSING):
+    """Fattore che porta l'icosaedro di riferimento (circonraggio 1) sul lato
+    `a` del triangolo di base della faccia estesa: e' il `factor` con cui
+    `make_M` posa le 20 facce. A questa scala i 12 vertici dell'icosaedro sono
+    12 vertici di M."""
+    ico = geometry.Polyhedron.ico
+    ico_side = (ico.vertices[ico.faces[0][0]] - ico.vertices[ico.faces[0][1]]).length()
+    base = make_extended_face(phi)
+    corners = [Vector(base.vertices[SEG_PER_EDGE * i]) for i in range(N_EDGES)]
+    return (corners[0] - corners[1]).length() / ico_side
+
+
 def make_M(phi=PHI_CLOSING):
     """Costruisce il poliedro M completo come un unico MeshData.
 
