@@ -60,5 +60,6 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `M_video.py`       | il video: dal quadro di Saffaro a M, che gira dentro l'icosaedro ed esplode nei 240 triangoli allineati per contarli; usa `../../../assets` (m.jpg, m2face_texture.png) |
 | `M_video2.py`      | il secondo video: fondo scuro sfumato fra i quattro angoli, M nella posa del quadro che gira, l'icosaedro, M che sparisce e ricompare, l'esplosione |
 | `deltahedra_1.py`  | M e l'icosaedro, poi gli otto deltaedri convessi (da `../../../modelli-3d/convex-deltahedra`) in un girotondo, ordinati per numero di facce |
+| `biform_deltahedra.py` | deltaedri monoformi, biformi e triformi (icosaedro, stella octangula, catena di tre tetraedri): sferette colorate per tipo di vertice, scritte collegate ai vertici visibili |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).
