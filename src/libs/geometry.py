@@ -293,3 +293,29 @@ def polyhedron_mesh(poly, scale=1.0):
     md.vertices = [(v * scale).tup() for v in poly.vertices]
     md.faces = [list(f) for f in poly.faces]
     return md
+
+
+# =============================================================================
+# FILE OBJ
+# =============================================================================
+
+def read_obj(path, y_up=True):
+    """Legge un file OBJ (solo 'v' e 'f') e restituisce un MeshData.
+
+    Gli indici delle facce in OBJ partono da 1 e possono portare /vt/vn, che
+    qui si ignorano. Con y_up=True le coordinate si convertono dalla
+    convenzione dell'esportatore di Blender (Y in alto, -Z in avanti) a quella
+    della scena (Z in alto): (x, y, z) -> (x, -z, y). E' una rotazione, quindi
+    l'orientamento delle facce si conserva."""
+    md = MeshData()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            tok = line.split()
+            if not tok:
+                continue
+            if tok[0] == "v":
+                x, y, z = (float(t) for t in tok[1:4])
+                md.vertices.append((x, -z, y) if y_up else (x, y, z))
+            elif tok[0] == "f":
+                md.faces.append([int(t.split("/")[0]) - 1 for t in tok[1:]])
+    return md
