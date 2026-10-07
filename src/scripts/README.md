@@ -3,7 +3,7 @@
 Script "main" da eseguire dentro **Blender**. Non sono importabili come moduli:
 sono punti d'ingresso che costruiscono/animano una scena.
 
-Le librerie condivise (`geometry`, `extended_face`, `pieces`, `bl_utils`, `bl_anim`, `m_scene`) stanno in
+Le librerie condivise (`geometry`, `extended_face`, `pieces`, `textures`, `bl_utils`, `bl_anim`, `m_scene`, `story`) stanno in
 [`../libs`](../libs) e vengono coperte dai test in [`../../test`](../../test).
 
 ## Come si esegue uno script in Blender
@@ -61,5 +61,8 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `M_video2.py`      | il secondo video: fondo scuro sfumato fra i quattro angoli, M nella posa del quadro che gira, l'icosaedro, M che sparisce e ricompare, l'esplosione |
 | `deltahedra_1.py`  | M e l'icosaedro, poi gli otto deltaedri convessi (da `../../../modelli-3d/convex-deltahedra`) in un girotondo, ordinati per numero di facce |
 | `biform_deltahedra.py` | deltaedri monoformi, biformi e triformi (icosaedro, stella octangula, catena di tre tetraedri): sferette colorate per tipo di vertice, scritte collegate ai vertici visibili |
+| `cundy_deltahedra.py` | i 25 deltaedri di Cundy e Olshevsky (`../../../3dmodels/cundy`) in una platea, i piccoli davanti e i grandi in fondo, in colori pastello |
+| `scene_1.py`       | dal quadro a M (dal materiale dipinto al pastello), lo scheletro e le facce dell'icosaedro, i solidi platonici, e l'esplosione dei 240 triangoli in 20 gruppi |
+| `scene_2.py`       | continua scene_1 (stesso fotogramma): i triangoli spariscono, poi icosaedro e M, il tetraedro, e gli otto deltaedri convessi in triangolo e pentagono; texture del triangolo bordato generata in `assets/face_border.png` |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).

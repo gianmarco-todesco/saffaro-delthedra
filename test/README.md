@@ -38,5 +38,6 @@ pytest test -v
 | `test_extended_face.py` | faccia estesa di M: triangoli equilateri, reparametrizzazione `a`, chiusura di M |
 | `test_pieces.py`     | M come 240 pezzi rigidi, la griglia, `face_planes`/`enclosing_scale`/`core_scale` |
 | `test_obj.py`        | `read_obj`: facce con e senza `/`, conversione da Y in alto a Z in alto |
+| `test_textures.py`   | `border_triangle`: triangolo equilatero, bordo scuro dello spessore chiesto, centro chiaro e neutro |
 
 `context.py` mette `src/libs/` sul `sys.path`; ogni test fa `from context import geometry`.

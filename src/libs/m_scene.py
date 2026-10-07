@@ -39,6 +39,25 @@ def linear_rgba(rgb):
     return tuple(srgb_to_linear(c) for c in rgb) + (1.0,)
 
 
+def oklch_to_linear(lightness, chroma, hue_deg):
+    """Un colore OKLCH in RGB lineare (gli ingressi colore dei nodi), e se era
+    fuori gamut. OKLCH e' fatto perche' due colori con la stessa L e la stessa
+    C sembrino ugualmente luminosi e saturi qualunque sia la tinta: in HSV un
+    giallo e un blu con gli stessi valori sembrano diversissimi. Le matrici
+    sono quelle di Bjorn Ottosson, che ha definito Oklab."""
+    h = math.radians(hue_deg)
+    a, b = chroma * math.cos(h), chroma * math.sin(h)
+    l_ = lightness + 0.3963377774 * a + 0.2158037573 * b
+    m_ = lightness - 0.1055613458 * a - 0.0638541728 * b
+    s_ = lightness - 0.0894841775 * a - 1.2914855480 * b
+    l, m, s3 = l_ ** 3, m_ ** 3, s_ ** 3
+    rgb = (+4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s3,
+           -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s3,
+           -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s3)
+    clipped = any(c < 0.0 or c > 1.0 for c in rgb)
+    return tuple(min(1.0, max(0.0, c)) for c in rgb) + (1.0,), clipped
+
+
 # =============================================================================
 # LE MISURE PRESE SUL QUADRO
 # =============================================================================
@@ -298,7 +317,177 @@ def painted_face_material(kit, image, uvs, palette, light_direction, grain, fade
     return mat
 
 
+def look_face_material(kit, image, uvs, palette, light_direction, grain, pastel, roughness):
+    """Il materiale delle facce che passa con continuita' dal quadro al
+    fisico.
+
+    Il nodo 'Look' mescola i due aspetti: 0 = i colori del quadro (la stessa
+    catena di painted_face_material: tavolozza secondo (n.l + 1) / 2,
+    emissiva), 1 = un Principled del colore `pastel` (RGBA lineare). Tutt'e due
+    moltiplicati per la grana della stessa texture, quindi nel passaggio cambia
+    il colore e non la pittura. Il nodo 'Fade' poi lo dissolve nel trasparente
+    (0 = invisibile, 1 = pieno). Valori di partenza: Look 0, Fade 1."""
+    mat, nodes, links = kit.new_material("face")
+    out = nodes.new("ShaderNodeOutputMaterial")
+
+    # la grana: luminanza della texture / sua media, poi 1 + grain * (g - 1)
+    tex = nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    tex.extension = 'EXTEND'
+    bw = nodes.new("ShaderNodeRGBToBW")
+    norm = nodes.new("ShaderNodeMath")
+    norm.operation = 'DIVIDE'
+    norm.inputs[1].default_value = texture_mean_luminance(image, uvs)
+    grain_node = nodes.new("ShaderNodeMath")
+    grain_node.operation = 'MULTIPLY_ADD'
+    grain_node.inputs[1].default_value = grain
+    grain_node.inputs[2].default_value = 1.0 - grain
+    links.new(tex.outputs["Color"], bw.inputs["Color"])
+    links.new(bw.outputs["Val"], norm.inputs[0])
+    links.new(norm.outputs["Value"], grain_node.inputs[0])
+
+    # il quadro: la tavolozza secondo quanto la faccia guarda la luce
+    geo = nodes.new("ShaderNodeNewGeometry")
+    facing = nodes.new("ShaderNodeVectorMath")
+    facing.operation = 'DOT_PRODUCT'
+    facing.inputs[1].default_value = tuple(-mathutils.Vector(light_direction).normalized())
+    lit = nodes.new("ShaderNodeMath")
+    lit.operation = 'MULTIPLY_ADD'
+    lit.inputs[1].default_value = 0.5
+    lit.inputs[2].default_value = 0.5
+    links.new(geo.outputs["Normal"], facing.inputs[0])
+    links.new(facing.outputs["Value"], lit.inputs[0])
+    ramp = nodes.new("ShaderNodeValToRGB")
+    ramp.name = "Palette"
+    elements = ramp.color_ramp.elements
+    while len(elements) < len(palette):
+        elements.new(0.5)
+    for element, (pos, rgb) in zip(elements, palette):
+        element.position = pos
+        element.color = linear_rgba(rgb)
+    ramp.color_ramp.interpolation = 'LINEAR'
+    links.new(lit.outputs["Value"], ramp.inputs["Fac"])
+    painted = nodes.new("ShaderNodeVectorMath")
+    painted.operation = 'SCALE'
+    links.new(ramp.outputs["Color"], painted.inputs[0])
+    links.new(grain_node.outputs["Value"], painted.inputs["Scale"])
+    emit = nodes.new("ShaderNodeEmission")
+    links.new(painted.outputs["Vector"], emit.inputs["Color"])
+
+    # il fisico: il pastello per la stessa grana
+    tint = nodes.new("ShaderNodeVectorMath")
+    tint.operation = 'SCALE'
+    tint.inputs[0].default_value = tuple(pastel[:3])
+    links.new(grain_node.outputs["Value"], tint.inputs["Scale"])
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Roughness"].default_value = roughness
+    links.new(tint.outputs["Vector"], bsdf.inputs["Base Color"])
+
+    look = nodes.new("ShaderNodeMixShader")
+    look.name = "Look"
+    look.inputs["Fac"].default_value = 0.0
+    links.new(emit.outputs["Emission"], look.inputs[1])
+    links.new(bsdf.outputs["BSDF"], look.inputs[2])
+    clear = nodes.new("ShaderNodeBsdfTransparent")
+    fade = nodes.new("ShaderNodeMixShader")
+    fade.name = "Fade"
+    fade.inputs["Fac"].default_value = 1.0
+    links.new(clear.outputs["BSDF"], fade.inputs[1])
+    links.new(look.outputs["Shader"], fade.inputs[2])
+    links.new(fade.outputs["Shader"], out.inputs["Surface"])
+    mat.diffuse_color = tuple(pastel[:3]) + (1.0,)
+    return mat
+
+
+def fading_material(kit, suffix, color, roughness=0.5):
+    """Un Principled del colore `color` (RGBA lineare) che si dissolve nel
+    trasparente col nodo 'Fade': 0 = invisibile, 1 = pieno, valori in mezzo =
+    semitrasparente (0.8 = opaco all'80%). Il valore di partenza e' 0."""
+    mat, nodes, links = kit.new_material(suffix)
+    out = nodes.new("ShaderNodeOutputMaterial")
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Base Color"].default_value = tuple(color[:3]) + (1.0,)
+    bsdf.inputs["Roughness"].default_value = roughness
+    clear = nodes.new("ShaderNodeBsdfTransparent")
+    fade = nodes.new("ShaderNodeMixShader")
+    fade.name = "Fade"
+    fade.inputs["Fac"].default_value = 0.0
+    links.new(clear.outputs["BSDF"], fade.inputs[1])
+    links.new(bsdf.outputs["BSDF"], fade.inputs[2])
+    links.new(fade.outputs["Shader"], out.inputs["Surface"])
+    mat.diffuse_color = tuple(color[:3]) + (1.0,)
+    return mat
+
+
+def skeleton_mesh(kit, suffix, vertices, edges, radius, material, segments=16):
+    """Lo scheletro di un poliedro in una sola mesh: un cilindretto per
+    spigolo e una sferetta dello stesso raggio per vertice. Le sferette
+    chiudono i giunti, dove i cilindretti si incontrano ad angolo."""
+    import bmesh
+    bm = bmesh.new()
+    V = [mathutils.Vector(v) for v in vertices]
+    for a, b in edges:
+        d = V[b] - V[a]
+        rot = d.to_track_quat('Z', 'Y').to_matrix().to_4x4()
+        bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=radius,
+                              radius2=radius, depth=d.length,
+                              matrix=mathutils.Matrix.Translation((V[a] + V[b]) / 2) @ rot)
+    for v in V:
+        bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=segments // 2,
+                                  radius=radius, matrix=mathutils.Matrix.Translation(v))
+    for face in bm.faces:
+        face.smooth = True
+    mesh = bpy.data.meshes.new(kit.name(suffix))
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(material)
+    return mesh
+
+
+def tinted_texture_material(kit, suffix, image, tint, roughness=0.5):
+    """Un Principled il cui colore e' la texture moltiplicata per `tint`
+    (RGBA lineare): dove la texture e' bianca esce `tint`, dove e' scura resta
+    scuro. Con la texture di textures.border_triangle il centro della faccia
+    prende il colore e il bordo resta scuro per tutti."""
+    mat, nodes, links = kit.new_material(suffix)
+    out = nodes.new("ShaderNodeOutputMaterial")
+    tex = nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    tex.extension = 'EXTEND'
+    mix = nodes.new("ShaderNodeMix")
+    mix.data_type = 'RGBA'
+    mix.blend_type = 'MULTIPLY'
+    _socket(mix.inputs, "Factor_Float").default_value = 1.0
+    _socket(mix.inputs, "B_Color").default_value = tuple(tint[:3]) + (1.0,)
+    links.new(tex.outputs["Color"], _socket(mix.inputs, "A_Color"))
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Roughness"].default_value = roughness
+    links.new(_socket(mix.outputs, "Result_Color"), bsdf.inputs["Base Color"])
+    links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+    mat.diffuse_color = tuple(tint[:3]) + (1.0,)
+    return mat
+
+
+def write_image(path, pixels):
+    """Scrive l'array `pixels` -- (altezza, larghezza, 4), float, la riga 0 in
+    basso -- come PNG in `path`, sostituendo il file se c'e', e restituisce
+    l'immagine Blender. I valori sono quelli che si vedono (sRGB), come in un
+    PNG qualsiasi."""
+    h, w, _ = pixels.shape
+    name = os.path.basename(path)
+    old = bpy.data.images.get(name)
+    if old is not None:
+        bpy.data.images.remove(old)
+    img = bpy.data.images.new(name, w, h, alpha=True)
+    img.pixels.foreach_set(np.asarray(pixels, dtype=np.float32).ravel())
+    img.filepath_raw = path
+    img.file_format = 'PNG'
+    img.save()
+    return img
+
+
 FADE_PATH = 'nodes["Fade"].inputs[0].default_value'
+LOOK_PATH = 'nodes["Look"].inputs[0].default_value'
 TEXTURE_MIX_PATH = 'nodes["TextureMix"].inputs[0].default_value'
 
 
@@ -633,7 +822,10 @@ def build_background(kit, rig, cam, zoom, depth, corners_srgb, bleed):
 
     # larghezza dell'inquadratura: proporzionale a ortho_scale, inversa della focale
     var = rig.zoom_path
-    expr = f"{var} / {zoom!r}" if rig.kind == 'ORTHO' else f"{zoom!r} / {var}"
+    # float(): un numero numpy nell'espressione diventerebbe 'np.float64(...)',
+    # che il driver non sa valutare
+    z = float(zoom)
+    expr = f"{var} / {z!r}" if rig.kind == 'ORTHO' else f"{z!r} / {var}"
     for axis in (0, 1):
         fcurve = obj.driver_add("scale", axis)
         driver = fcurve.driver
