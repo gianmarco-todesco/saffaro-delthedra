@@ -64,5 +64,7 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `cundy_deltahedra.py` | i 25 deltaedri di Cundy e Olshevsky (`../../../3dmodels/cundy`) in una platea, i piccoli davanti e i grandi in fondo, in colori pastello |
 | `scene_1.py`       | dal quadro a M (dal materiale dipinto al pastello), lo scheletro e le facce dell'icosaedro, i solidi platonici, e l'esplosione dei 240 triangoli in 20 gruppi |
 | `scene_2.py`       | continua scene_1 (stesso fotogramma): i triangoli spariscono, poi icosaedro e M, il tetraedro, e gli otto deltaedri convessi in triangolo e pentagono; texture del triangolo bordato generata in `assets/face_border.png` |
+| `scene_3.py`       | cinque deltaedri di Cundy non convessi attorno al composto di tre tetraedri, che restando al centro cresce in verticale, dalle due parti, nell'elica di Boerdijk-Coxeter; la torre rimpicciolisce finche' sborda di poco |
+| `Creating_Helix.py`| lo script dello studente con l'elica di Boerdijk-Coxeter (handler di fotogramma), riferimento per scene_3 |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).
