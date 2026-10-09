@@ -96,8 +96,8 @@ if _LIBS not in sys.path:
     sys.path.insert(0, _LIBS)
 
 # questo serve nel caso che tu faccia modifiche ai moduli senza interrompere la sessione di Blender
-import geometry, bl_utils, extended_face, bl_anim, m_scene, story, textures
-for _mod in (geometry, bl_utils, extended_face, bl_anim, m_scene, story, textures):
+import geometry, bl_utils, extended_face, bl_anim, m_scene, story, textures, deltahedra
+for _mod in (geometry, bl_utils, extended_face, bl_anim, m_scene, story, textures, deltahedra):
     importlib.reload(_mod)
 
 from mathutils import Vector, Matrix, Quaternion
@@ -225,13 +225,8 @@ def helix_axis(V):
 def load_other(path):
     """Il deltaedro del file, coi vertici saldati, centrato e con lo spigolo
     EDGE: (vertici, facce, circonraggio)."""
-    md = geometry.read_obj(path)
-    index, remap = {}, []
-    for v in md.vertices:
-        remap.append(index.setdefault(tuple(np.round(v, 5)), len(index)))
-    V = np.asarray(list(index), dtype=float)
-    faces = [[remap[i] for i in f] for f in md.faces]
-    V = (V - V.mean(axis=0)) * (EDGE / float(np.linalg.norm(V[faces[0][0]] - V[faces[0][1]])))
+    V, faces = deltahedra.load_welded(path)
+    V = V * (EDGE / float(np.linalg.norm(V[faces[0][0]] - V[faces[0][1]])))
     return V, faces, float(np.linalg.norm(V, axis=1).max())
 
 

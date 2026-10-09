@@ -32,11 +32,10 @@ col prefisso CD_.
 import bpy
 import mathutils
 
-import os, sys, glob
+import os, sys
 import math
 import importlib
 
-import numpy as np
 
 # rendi possibile importare i moduli da src/libs
 # (nota bene: __file__ non funziona dallo script editor di Blender,
@@ -66,8 +65,8 @@ if _LIBS not in sys.path:
     sys.path.insert(0, _LIBS)
 
 # questo serve nel caso che tu faccia modifiche ai moduli senza interrompere la sessione di Blender
-import geometry, bl_utils, bl_anim, m_scene
-for _mod in (geometry, bl_utils, bl_anim, m_scene):
+import bl_utils, bl_anim, m_scene, deltahedra
+for _mod in (bl_utils, bl_anim, m_scene, deltahedra):
     importlib.reload(_mod)
 
 from mathutils import Vector
@@ -145,135 +144,32 @@ SENSOR_H = SENSOR_W / ASPECT
 
 
 # =============================================================================
-# I MODELLI E LA DISPOSIZIONE
+# LA PLATEA E LA CAMERA (libs/deltahedra.py)
 # =============================================================================
 
-class Model:
-    """Un deltaedro: il file, la mesh (vertici saldati, centrata), il
-    circonraggio, e dove sta."""
-
-    def __init__(self, path):
-        self.path = path
-        self.name = os.path.splitext(os.path.basename(path))[0]
-        md = geometry.read_obj(path)
-        index, remap = {}, []
-        for v in md.vertices:
-            remap.append(index.setdefault(tuple(np.round(v, 5)), len(index)))
-        V = np.asarray(list(index), dtype=float)
-        self.vertices = V - V.mean(axis=0)
-        self.faces = [[remap[i] for i in f] for f in md.faces]
-        self.radius = float(np.linalg.norm(self.vertices, axis=1).max())
-        self.location = Vector((0.0, 0.0, 0.0))
+VIEW = deltahedra.View(CAMERA_ELEVATION, CAMERA_LENS, SENSOR_W, ASPECT)
 
 
 def load_models():
-    paths = sorted(glob.glob(os.path.join(MODELS_DIR, "*.obj")))
-    if len(paths) != sum(ROWS):
-        raise ValueError(f"{len(paths)} modelli in {MODELS_DIR}, ma ROWS ne prevede {sum(ROWS)}")
-    return [Model(p) for p in paths]
+    return deltahedra.load_models(MODELS_DIR, sum(ROWS))
 
 
 def arrange(models):
-    """Le file: i modelli ordinati per grandezza (a pari grandezza, per nome),
-    i primi davanti. Restituisce l'ordine di comparsa e le file.
+    return deltahedra.arrange(models, ROWS, GAP, ROW_GAP, CLEARANCE)
 
-    Dentro una fila il piu' grande sta al centro e gli altri si alternano a
-    destra e a sinistra, a scalare; due vicini stanno alla distanza che serve
-    a loro due (somma dei raggi piu' GAP), non a quella del pezzo piu' grande
-    della fila, che allargherebbe tutto per un pezzo solo. La distanza fra due
-    file e' la somma dei loro raggi massimi piu' ROW_GAP: non si toccano mai,
-    nemmeno girando.
-
-    L'ordine di comparsa va fila per fila, da sinistra a destra."""
-    by_size = sorted(models, key=lambda m: (round(m.radius, 3), m.name))
-    rows, k = [], 0
-    for n in ROWS:
-        rows.append(by_size[k:k + n])
-        k += n
-    y, prev = 0.0, None
-    for k, row in enumerate(rows):
-        r = max(m.radius for m in row)
-        if prev is not None:
-            y += prev + r + ROW_GAP
-        prev = r
-        # il piu' grande al centro, poi alternati: ..., 4, 2, 0, 1, 3, ...
-        big_first = sorted(row, key=lambda m: (-m.radius, m.name))
-        line = []
-        for j, m in enumerate(big_first):
-            if j % 2:
-                line.append(m)
-            else:
-                line.insert(0, m)
-        x, xs = 0.0, []
-        for j, m in enumerate(line):
-            if j:
-                x += line[j - 1].radius + m.radius + GAP
-            xs.append(x)
-        mid = (xs[0] - line[0].radius + xs[-1] + line[-1].radius) / 2.0
-        for m, x in zip(line, xs):
-            m.location = Vector((x - mid, y, m.radius + CLEARANCE))
-        rows[k] = line
-    order = [m for row in rows for m in row]
-    return order, rows
-
-
-# =============================================================================
-# LA CAMERA
-# =============================================================================
 
 def camera_back():
-    e = math.radians(CAMERA_ELEVATION)
-    return Vector((0.0, -math.cos(e), math.sin(e)))
+    return Vector(VIEW.back)
 
 
-def project(points, target, distance):
-    """Coordinate nell'immagine (0..1, y verso l'alto) per la camera che
-    guarda `target` da `distance` lungo camera_back(): la geometria della
-    camera di Blender (prospettica, sensor_fit AUTO)."""
-    back = np.asarray(camera_back())
-    f = -back
-    r = np.array([1.0, 0.0, 0.0])
-    u = np.cross(r, f)
-    q = np.asarray(points) - (np.asarray(target) + back * distance)
-    z = q @ f
-    return 0.5 + (q @ r) / z * CAMERA_LENS / SENSOR_W, 0.5 + (q @ u) / z * CAMERA_LENS / SENSOR_H
-
-
-def _sphere_cloud(models):
-    n = 300
-    i = np.arange(n) + 0.5
-    phi = np.arccos(1 - 2 * i / n)
-    theta = math.pi * (1 + 5 ** 0.5) * i
-    S = np.c_[np.cos(theta) * np.sin(phi), np.sin(theta) * np.sin(phi), np.cos(phi)]
-    return np.concatenate([S * m.radius + np.asarray(m.location) for m in models])
+def sphere_cloud(models):
+    return deltahedra.sphere_cloud([m.location for m in models], [m.radius for m in models])
 
 
 def frame_all(models):
-    """(punto inquadrato, distanza): la platea -- le sfere che contengono i
-    pezzi, quindi qualunque sia la loro rotazione -- occupa FRAME_FILL
-    dell'immagine nella dimensione che arriva prima al limite, ed e'
-    centrata. Bisezione sulla distanza e correzione del punto, alternate."""
-    P = _sphere_cloud(models)
-    target = Vector(np.mean([np.asarray(m.location) for m in models], axis=0))
-    for _ in range(10):
-        lo, hi = 1.0, 500.0
-        for _ in range(60):
-            mid = 0.5 * (lo + hi)
-            x, y = project(P, target, mid)
-            if (x.max() - x.min()) > FRAME_FILL[0] or (y.max() - y.min()) > FRAME_FILL[1]:
-                lo = mid
-            else:
-                hi = mid
-        d = hi
-        x, y = project(P, target, d)
-        w = d * SENSOR_W / CAMERA_LENS
-        dx = ((x.min() + x.max()) / 2 - 0.5) * w
-        dy = ((y.min() + y.max()) / 2 - 0.5) * w / ASPECT
-        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
-            break
-        R = camera_back().to_track_quat('Z', 'Y').to_matrix()
-        target = target + R.col[0] * dx + R.col[1] * dy
-    return target, d
+    target, distance = deltahedra.frame_all(VIEW, [m.location for m in models],
+                                            [m.radius for m in models], FRAME_FILL)
+    return Vector(target), distance
 
 
 # =============================================================================
@@ -311,16 +207,8 @@ def build():
     m_scene.setup_sky_world(KIT, math.radians(SKY_SUN_ELEVATION),
                             m_scene.sky_rotation(-light), SKY_STRENGTH,
                             sun_size=math.radians(SUN_SIZE_DEG))
-    floor_mesh = bpy.data.meshes.new(KIT.name("floor"))
-    h = FLOOR_SIZE / 2.0
-    floor_mesh.from_pydata([(-h, -h, 0.0), (h, -h, 0.0), (h, h, 0.0), (-h, h, 0.0)], [], [(0, 1, 2, 3)])
-    floor_mat = m_scene.wire_material(KIT, "floor", m_scene.linear_rgba(FLOOR_SRGB),
-                                      roughness=FLOOR_ROUGHNESS)
-    bsdf = next(n for n in floor_mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
-    bsdf.inputs["Specular IOR Level"].default_value = FLOOR_SPECULAR
-    floor_mesh.materials.append(floor_mat)
-    floor = KIT.new_object("floor", floor_mesh)
-    floor.location = (0.0, sum(m.location.y for m in models) / len(models), 0.0)
+    m_scene.build_floor(KIT, FLOOR_SRGB, FLOOR_ROUGHNESS, FLOOR_SPECULAR, FLOOR_SIZE,
+                        y=sum(m.location[1] for m in models) / len(models))
     target, distance = frame_all(models)
     cam = RIG.build(KIT, target + back * distance, clip_end=distance + FLOOR_SIZE)
     cam.data.lens = CAMERA_LENS
@@ -339,7 +227,7 @@ def build():
         mesh.materials.append(m_scene.wire_material(KIT, f"mat_{m.name}", color, roughness=ROUGHNESS))
         mesh.update()
         obj = KIT.new_object(m.name, mesh)
-        obj.location = m.location
+        obj.location = tuple(m.location)
         t0 = n * APPEAR_GAP
         bl_anim.key_value(obj, "scale", [(frame_of(t0), (0.0,) * 3),
                                          (frame_of(t0 + GROW_SECONDS), (1.0,) * 3)])
@@ -352,12 +240,12 @@ def build():
                           interpolation='LINEAR')
     scene.frame_set(FRAME_START)
 
-    x, y = project(_sphere_cloud(models), target, distance)
+    x, y = VIEW.project(sphere_cloud(models), target, distance)
     print(f"[cundy] {len(models)} deltaedri, frame {FRAME_START}-{frame_end} a {FPS} fps "
           f"({t_end:.1f} s); l'ultimo compare a {t_last:.1f} s")
     for k, row in enumerate(rows):
         print(f"[cundy] fila {k + 1}: {len(row)} pezzi, raggi {min(m.radius for m in row):.2f}-"
-              f"{max(m.radius for m in row):.2f}, a y = {row[0].location.y:.2f}")
+              f"{max(m.radius for m in row):.2f}, a y = {row[0].location[1]:.2f}")
     print(f"[cundy] camera a {distance:.2f}; la platea occupa x {x.min():.3f}-{x.max():.3f}, "
           f"y {y.min():.3f}-{y.max():.3f} dell'immagine")
     print(f"[cundy] colori fuori gamut (tagliati): {clipped if clipped else 'nessuno'}")

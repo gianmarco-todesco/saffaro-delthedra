@@ -65,6 +65,8 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `scene_1.py`       | dal quadro a M (dal materiale dipinto al pastello), lo scheletro e le facce dell'icosaedro, i solidi platonici, e l'esplosione dei 240 triangoli in 20 gruppi |
 | `scene_2.py`       | continua scene_1 (stesso fotogramma): i triangoli spariscono, poi icosaedro e M, il tetraedro, e gli otto deltaedri convessi in triangolo e pentagono; texture del triangolo bordato generata in `assets/face_border.png` |
 | `scene_3.py`       | cinque deltaedri di Cundy non convessi attorno al composto di tre tetraedri, che restando al centro cresce in verticale, dalle due parti, nell'elica di Boerdijk-Coxeter; la torre rimpicciolisce finche' sborda di poco |
+| `scene_4.py`       | biform_deltahedra piu' cundy_deltahedra: icosaedro, stella e composto con sferette, titoli e frecce sui tipi di vertice; poi la stella salta al suo posto nella platea, che compare mentre la camera indietreggia |
+| `scene_5a.py`      | M con la texture del quadro sul pavimento ardesia, e davanti, su un arco, cinque deltaedri di Saffaro (`../../../modelli-3d/saffaro-deltahedra`) grandi un terzo, in pastello |
 | `Creating_Helix.py`| lo script dello studente con l'elica di Boerdijk-Coxeter (handler di fotogramma), riferimento per scene_3 |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).

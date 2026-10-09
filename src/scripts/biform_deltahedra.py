@@ -79,8 +79,8 @@ if _LIBS not in sys.path:
     sys.path.insert(0, _LIBS)
 
 # questo serve nel caso che tu faccia modifiche ai moduli senza interrompere la sessione di Blender
-import geometry, bl_utils, bl_anim, m_scene
-for _mod in (geometry, bl_utils, bl_anim, m_scene):
+import bl_utils, bl_anim, m_scene, deltahedra
+for _mod in (bl_utils, bl_anim, m_scene, deltahedra):
     importlib.reload(_mod)
 
 from mathutils import Vector
@@ -232,81 +232,18 @@ def label_fade_keys(n):
 # GEOMETRIA
 # =============================================================================
 
-def tetrahedron_chain():
-    """Tre tetraedri regolari di spigolo 1 in catena: il secondo incollato a
-    una faccia del primo, il terzo a una faccia del secondo, senza tornare
-    indietro. Ogni nuovo vertice e' il riflesso, attraverso la faccia in
-    comune, del vertice opposto. Restituisce (vertici numpy, facce); le facce
-    interne (bcd, cde) non ci sono."""
-    def reflect(p, a, b, c):
-        n = np.cross(b - a, c - a)
-        n = n / np.linalg.norm(n)
-        return p - 2.0 * np.dot(p - a, n) * n
-    a = np.array([0.0, 0.0, 0.0])
-    b = np.array([1.0, 0.0, 0.0])
-    c = np.array([0.5, math.sqrt(3) / 2, 0.0])
-    d = np.array([0.5, math.sqrt(3) / 6, math.sqrt(2.0 / 3.0)])
-    e = reflect(a, b, c, d)
-    f = reflect(b, c, d, e)
-    V = np.array([a, b, c, d, e, f])
-    faces = [(0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 4), (1, 3, 4), (2, 3, 5), (2, 4, 5), (3, 4, 5)]
-    return V, orient_outward(V, faces)
-
-
-def orient_outward(V, faces):
-    """Le facce con l'orientamento coerente e le normali verso l'esterno.
-
-    Si propaga l'orientamento da faccia a faccia attraverso gli spigoli (due
-    facce adiacenti percorrono lo spigolo in sensi opposti), poi si sceglie il
-    verso col segno del volume: su un poliedro non convesso il confronto col
-    baricentro non basta."""
-    faces = [list(f) for f in faces]
-    done, todo = {0}, [0]
-    while todo:
-        i = todo.pop()
-        edges_i = {(faces[i][k], faces[i][(k + 1) % 3]) for k in range(3)}
-        for j, g in enumerate(faces):
-            if j in done:
-                continue
-            edges_j = {(g[k], g[(k + 1) % 3]) for k in range(3)}
-            if not any(e in edges_j or (e[1], e[0]) in edges_j for e in edges_i):
-                continue
-            if any(e in edges_j for e in edges_i):       # stesso verso: va girata
-                faces[j] = [g[0], g[2], g[1]]
-            done.add(j)
-            todo.append(j)
-    volume = sum(np.dot(V[f[0]], np.cross(V[f[1]], V[f[2]])) for f in faces)
-    if volume < 0:
-        faces = [[f[0], f[2], f[1]] for f in faces]
-    return faces
-
-
 def load_polyhedron(source, euler_deg):
     """Il poliedro: dal file (vertici duplicati saldati) o costruito, centrato,
     nella sfera di raggio PIECE_RADIUS e ruotato nella posa. Restituisce
     (vertici numpy, facce)."""
     if source == "CHAIN":
-        V, faces = tetrahedron_chain()
+        V, faces = deltahedra.tetrahedron_chain()
     else:
-        md = geometry.read_obj(source)
-        index, remap = {}, []
-        for v in md.vertices:
-            remap.append(index.setdefault(tuple(np.round(v, 5)), len(index)))
-        V = np.asarray(list(index), dtype=float)
-        faces = [[remap[i] for i in f] for f in md.faces]
+        V, faces = deltahedra.load_welded(source)
     V = V - V.mean(axis=0)
     V = V * (PIECE_RADIUS / np.linalg.norm(V, axis=1).max())
     R = np.asarray(mathutils.Euler([math.radians(a) for a in euler_deg], 'XYZ').to_matrix())
     return V @ R.T, faces
-
-
-def vertex_degrees(n, faces):
-    """Quanti triangoli concorrono in ogni vertice."""
-    deg = [0] * n
-    for f in faces:
-        for i in f:
-            deg[i] += 1
-    return deg
 
 
 def label_text(key, degree, count, n_types):
@@ -371,7 +308,7 @@ def build_polyhedra():
                           [(f, (0.0, 0.0, spin_angle(n, time_of(f)))) for f in frames
                            if time_of(f) <= t0 + SPIN_SECONDS + 1.0 / FPS],
                           interpolation='LINEAR')
-        out.append((key, obj, V, vertex_degrees(len(V), faces)))
+        out.append((key, obj, V, deltahedra.vertex_degrees(len(V), faces)))
     return out
 
 

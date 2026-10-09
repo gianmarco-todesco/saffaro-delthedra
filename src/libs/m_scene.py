@@ -686,6 +686,23 @@ def setup_sky_world(kit, sun_elevation, sun_rotation, strength, sun_size=None):
     return world
 
 
+def build_floor(kit, srgb, roughness, specular, size, y=0.0):
+    """Il pavimento: un quadrato di lato `size` nel piano z = 0, centrato in
+    (0, y). `specular` e' quanto riflette il cielo: lo si guarda di sbieco, e a
+    quegli angoli il riflesso (bianco) vince sul colore; col valore di default
+    (0.5) il pavimento esce grigio qualunque sia il suo colore."""
+    mesh = bpy.data.meshes.new(kit.name("floor"))
+    h = size / 2.0
+    mesh.from_pydata([(-h, -h, 0.0), (h, -h, 0.0), (h, h, 0.0), (-h, h, 0.0)], [], [(0, 1, 2, 3)])
+    mat = wire_material(kit, "floor", linear_rgba(srgb), roughness=roughness)
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs["Specular IOR Level"].default_value = specular
+    mesh.materials.append(mat)
+    floor = kit.new_object("floor", mesh)
+    floor.location = (0.0, y, 0.0)
+    return floor
+
+
 # =============================================================================
 # LA CAMERA
 # =============================================================================
