@@ -67,6 +67,8 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `scene_3.py`       | cinque deltaedri di Cundy non convessi attorno al composto di tre tetraedri, che restando al centro cresce in verticale, dalle due parti, nell'elica di Boerdijk-Coxeter; la torre rimpicciolisce finche' sborda di poco |
 | `scene_4.py`       | biform_deltahedra piu' cundy_deltahedra: icosaedro, stella e composto con sferette, titoli e frecce sui tipi di vertice; poi la stella salta al suo posto nella platea, che compare mentre la camera indietreggia |
 | `scene_5a.py`      | M con la texture del quadro sul pavimento ardesia, e davanti, su un arco, cinque deltaedri di Saffaro (`../../../modelli-3d/saffaro-deltahedra`) grandi un terzo, in pastello |
+| `scene_5b.py`      | M_story coi tempi del video (40 s): icosaedro pieno a 5 s, la faccia sola a 8, il ventaglio di 12 a 15, il grado di liberta' fra 17 e 19, A e B saldate a 25; spigoli piu' sottili, i raggi del ventaglio ancora di piu' |
+| `v2/scene-1.py`    | scene_1 per la seconda versione del video (28 s): quadro via a 8 s, scheletro a 15, a 20 M lascia il posto alle facce dell'icosaedro, a 22 torna, esplosione in un secondo a 25; senza solidi platonici |
 | `Creating_Helix.py`| lo script dello studente con l'elica di Boerdijk-Coxeter (handler di fotogramma), riferimento per scene_3 |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).

@@ -579,6 +579,16 @@ def wire_material(kit, suffix, color, roughness=0.4, glow_property=None,
     return mat
 
 
+CYCLES_SAMPLES = 256
+
+
+def use_cycles(scene, samples=CYCLES_SAMPLES):
+    """Il motore dei video: Cycles, coi campioni ridotti a `samples` (il
+    default di Blender e' piu' alto di quanto serva, e il render costa)."""
+    scene.render.engine = 'CYCLES'
+    scene.cycles.samples = samples
+
+
 def setup_glare(kit, scene, threshold=1.0, strength=1.0, size=0.5):
     """Il bagliore attorno a quello che e' piu' luminoso di `threshold`: un
     compositor Render Layers -> Glare (Bloom) -> uscita. API di Blender 5.x,
