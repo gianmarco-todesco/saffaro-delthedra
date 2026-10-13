@@ -70,6 +70,7 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `scene_5b.py`      | M_story coi tempi del video (40 s): icosaedro pieno a 5 s, la faccia sola a 8, il ventaglio di 12 a 15, il grado di liberta' fra 17 e 19, A e B saldate a 25; spigoli piu' sottili, i raggi del ventaglio ancora di piu' |
 | `v2/scene-1.py`    | scene_1 per la seconda versione del video (28 s): quadro via a 8 s, scheletro a 15, a 20 M lascia il posto alle facce dell'icosaedro, a 22 torna, esplosione in un secondo a 25; senza solidi platonici |
 | `v2/scene-2.py`    | scene_2 per la seconda versione (34 s), raccordata con v2/scene-1: tetraedro formato a 17 s, ottaedro a 21, icosaedro a 22, gli altri cinque a 30 |
+| `v2/scene-3.py`    | scene_3 per la seconda versione (10 s): i cinque deltaedri di Cundy escono a 3 s, il primo tetraedro a 4, gli altri da 8 |
 | `Creating_Helix.py`| lo script dello studente con l'elica di Boerdijk-Coxeter (handler di fotogramma), riferimento per scene_3 |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).
