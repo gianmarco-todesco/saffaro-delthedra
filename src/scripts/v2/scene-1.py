@@ -255,31 +255,8 @@ def visible_between(obj, t0, t1=None):
     bl_anim.key_visibility(obj, changes)
 
 
-def build_painting(image, center, height, width, depth):
-    mesh = bpy.data.meshes.new(KIT.name("painting"))
-    mesh.from_pydata([(-width / 2, 0, -height / 2), (width / 2, 0, -height / 2),
-                      (width / 2, 0, height / 2), (-width / 2, 0, height / 2)], [], [(0, 1, 2, 3)])
-    layer = mesh.uv_layers.new(name="UVMap")
-    for li, uv in zip(mesh.polygons[0].loop_indices, ((0, 0), (1, 0), (1, 1), (0, 1))):
-        layer.data[li].uv = uv
-    mat, nodes, links = KIT.new_material("painting")
-    out = nodes.new("ShaderNodeOutputMaterial")
-    tex = nodes.new("ShaderNodeTexImage")
-    tex.image = image
-    emit = nodes.new("ShaderNodeEmission")
-    clear = nodes.new("ShaderNodeBsdfTransparent")
-    mix = nodes.new("ShaderNodeMixShader")
-    mix.name = "Fade"
-    mix.inputs["Fac"].default_value = 1.0
-    links.new(tex.outputs["Color"], emit.inputs["Color"])
-    links.new(clear.outputs["BSDF"], mix.inputs[1])
-    links.new(emit.outputs["Emission"], mix.inputs[2])
-    links.new(mix.outputs["Shader"], out.inputs["Surface"])
-    bl_utils.set_blended(mat)
-    mesh.materials.append(mat)
-    obj = KIT.new_object("painting", mesh)
-    obj.location = (center[0], depth, center[1])
-    m_scene.hide_from_light(obj)
+def build_painting(image, layout):
+    obj, mat = story.build_painting(KIT, image, layout)
     fade(mat, [(PAINT_FADE[0], 1.0), (PAINT_FADE[1], 0.0)])
     visible_between(obj, 0.0, PAINT_FADE[1])
     return obj
@@ -344,7 +321,7 @@ def build():
     p_center, p_height, p_width = layout.painting_center, layout.painting_height, layout.painting_width
     p_depth, eye, lens = layout.painting_depth, layout.eye, layout.lens
     story.build_camera_and_world(KIT, layout, clip_end=story.CAMERA_DISTANCE + story.GRID_DEPTH + 30.0)
-    build_painting(painting_img, p_center, p_height, p_width, p_depth)
+    build_painting(painting_img, layout)
 
     # --- M ---
     face_img = KIT.load_image(m_scene.FACE_TEXTURE_FILE)

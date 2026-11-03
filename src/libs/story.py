@@ -14,9 +14,11 @@ NB: richiede `bpy` e `mathutils` -> eseguibile solo dentro Blender.
 
 import math
 
+import bpy
 import mathutils
 import numpy as np
 
+import bl_utils
 import geometry
 import pieces
 import m_scene
@@ -156,6 +158,176 @@ class Layout:
                                     GRID_DEPTH, w, h, GRID_FILL)
 
 
+class AxisLayout:
+    """Come Layout, ma con l'asse della camera che passa per il centro
+    di M: la camera sta in (0, -CAMERA_DISTANCE, 0) e guarda lungo +y. Il
+    quadro sta sullo stesso piano di Layout, scalato e spostato perche'
+    il poliedro dipinto abbia l'altezza e il centro di M visto da qui; la
+    focale fa entrare il quadro intero (con frame_margin). Ha gli attributi
+    che usano build_camera_and_world e build_painting.
+
+    Serve alle scene in cui M si muove lungo y restando, visto dalla camera,
+    dove sta nel quadro (v3/scene1a): con la camera di Layout, che guarda il
+    centro del quadro, M scivolerebbe di lato."""
+
+    def __init__(self, md, painting_size, frame_margin=1.03):
+        ref = Layout(md, painting_size)          # per il piano del quadro e la camera
+        self.rig = ref.rig
+        self.painting_depth = ref.painting_depth
+        self.eye = mathutils.Vector((0.0, -CAMERA_DISTANCE, 0.0))
+        w_px, h_px = painting_size
+        x0, y0, x1, y1 = PAINTING_MODEL_BOX
+        Q = self.rig.project_on_plane(model_points(md), self.eye, self.painting_depth)
+        qlo, qhi = Q.min(axis=0), Q.max(axis=0)
+        k = (qhi[2] - qlo[2]) / (y1 - y0)                # unita' mondo per pixel
+        cx, cz = (qlo[0] + qhi[0]) / 2, (qlo[2] + qhi[2]) / 2
+        px = cx - ((x0 + x1) / 2 - w_px / 2) * k
+        pz = cz + ((y0 + y1) / 2 - h_px / 2) * k
+        self.painting_center = (px, pz)
+        self.painting_height = h_px * k
+        self.painting_width = w_px * k
+        # la focale: il quadro intero, attorno all'asse (che non e' il suo centro)
+        half_w = max(abs(px - self.painting_width / 2), abs(px + self.painting_width / 2))
+        half_h = max(abs(pz - self.painting_height / 2), abs(pz + self.painting_height / 2))
+        width = 2.0 * max(half_w, half_h * self.rig.aspect) * frame_margin
+        self.lens = self.rig.zoom_for_width(width, self.painting_depth - self.eye.y)
+
+
+# =============================================================================
+# L'USCITA DAL QUADRO (v4): M esce dal quadro verso la camera di lato
+# =============================================================================
+#
+# I conti che v4/scene-1 e v4/scene-2 devono fare uguali perche' la seconda
+# cominci dove finisce la prima: dove si ferma M, la camera di lato e quella
+# finale (girata su M), e la griglia dei 240 triangoli davanti a lei.
+
+EXIT_CROSS_MARGIN = 0.05         # all'inizio M e' subito dietro il quadro
+EXIT_FINAL_GAP    = 1.0          # dopo l'uscita, fra il retro di M e il quadro
+EXIT_SCREEN_GAP   = 0.05         # ... e fra M e il quadro nell'immagine (frazione della larghezza)
+EXIT_SIDE_ANGLE   = 35.0         # la camera di lato: gradi attorno alla verticale (verso destra)
+EXIT_ELEVATION    = 8.0          # ... gradi in alto
+EXIT_DISTANCE     = 14.0         # ... dal punto che guarda
+EXIT_FRAME_FILL   = 0.85         # ... e quanta immagine occupano M e il quadro
+EXIT_M_FILL       = 0.7          # alla fine, quanta ne occupa la gabbia di M
+EXIT_GRID_BEHIND  = 3.0          # la griglia e' tanto piu' lontana del centro di M
+
+
+def camera_back(side_deg, elevation_deg):
+    """Dal punto guardato verso la camera: (0, -1, 0) con angoli nulli."""
+    a, e = math.radians(side_deg), math.radians(elevation_deg)
+    return np.array([math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e)])
+
+
+def screen_coords(eye, target, points):
+    """I punti nell'immagine della camera in `eye` che guarda `target` con
+    l'orizzonte dritto, in tangenti dell'angolo dall'asse: (x, y)."""
+    f = (target - eye) / np.linalg.norm(target - eye)
+    r = np.cross(f, [0.0, 0.0, 1.0])
+    r = r / np.linalg.norm(r)
+    u = np.cross(r, f)
+    v = np.asarray(points) - eye
+    depth = v @ f
+    return (v @ r) / depth, (v @ u) / depth
+
+
+def lens_to_fit(rig, eye, target, points, fill):
+    """La focale per cui i punti, visti da `eye` che guarda `target`,
+    occupano `fill` dell'immagine nella dimensione che arriva prima al
+    bordo."""
+    x, y = screen_coords(eye, target, points)
+    tan_half = max(np.abs(x).max(), np.abs(y).max() * rig.aspect) / fill
+    return rig.sensor_width / 2.0 / tan_half
+
+
+def look_quat(direction):
+    """La rotazione della camera che guarda lungo `direction`, con
+    l'orizzonte dritto."""
+    return mathutils.Vector(direction).normalized().to_track_quat('-Z', 'Y')
+
+
+class ExitView:
+    """Le posizioni dell'uscita dal quadro di v4/scene-1, da M e dalle
+    dimensioni del quadro. Attributi: layout (AxisLayout), plane (il piano
+    del quadro), s0 (la scala di M), y0 e y1 (dove sta M prima e dopo),
+    side (di quanto M va di lato, verso -x), m_end (il centro di M dopo),
+    target1, eye1, lens1 (la camera di lato), lens_m (la camera finale: sta
+    in eye1 e guarda m_end), ico_scale (la gabbia di M)."""
+
+    def __init__(self, md, painting_size):
+        self.layout = layout = AxisLayout(md, painting_size)
+        self.plane = plane = layout.painting_depth
+        P = model_points(md)
+        self.P = P
+        eye0 = np.asarray(layout.eye)
+        ymin, ymax = P[:, 1].min(), P[:, 1].max()
+        # il punto piu' vicino di M a EXIT_CROSS_MARGIN dietro il piano: y + s(y) ymin,
+        # con s(y) = (y - eye.y) / (0 - eye.y), e' lineare in y
+        k = -eye0[1]
+        self.y0 = (plane + EXIT_CROSS_MARGIN - ymin) / (1.0 + ymin / k)
+        self.s0 = (self.y0 + k) / k
+        self.y1 = plane - EXIT_FINAL_GAP - self.s0 * ymax
+        radius = self.s0 * float(np.linalg.norm(P, axis=1).max())
+        sphere = [radius * np.array(v) for v in
+                  ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))]
+        self.side, self.target1, self.eye1, self.lens1 = self._side_view(sphere)
+        self.m_end = np.array([-self.side, self.y1, 0.0])
+        self.ico_scale = geometry.enclosing_scale(md.vertices, geometry.Polyhedron.ico) * ICO_MARGIN
+        cage = [self.m_end + self.s0 * self.ico_scale * np.array(v) for v in
+                ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))]
+        self.lens_m = lens_to_fit(layout.rig, self.eye1, self.m_end, cage, EXIT_M_FILL)
+
+    def _side_view(self, m_points):
+        """La camera laterale: di quanto M va di lato (verso -x), il punto
+        guardato, la camera e la focale. Lo spostamento cresce a passi di 5 cm
+        finche' fra M e il quadro (fermo) resta EXIT_SCREEN_GAP della
+        larghezza dell'immagine. `m_points` sono i punti di M attorno al suo
+        centro."""
+        layout = self.layout
+        px, pz = layout.painting_center
+        hw, hh = layout.painting_width / 2.0, layout.painting_height / 2.0
+        p_centre = np.array([px, layout.painting_depth, pz])
+        corners = [p_centre + np.array([sx * hw, 0.0, sz * hh]) for sx in (-1, 1) for sz in (-1, 1)]
+        side = 0.0
+        while True:
+            m_end = np.array([-side, self.y1, 0.0])
+            target = (m_end + p_centre) / 2.0
+            eye = target + camera_back(EXIT_SIDE_ANGLE, EXIT_ELEVATION) * EXIT_DISTANCE
+            pts = [m_end + q for q in m_points]
+            lens = lens_to_fit(layout.rig, eye, target, corners + pts, EXIT_FRAME_FILL)
+            tan_half = layout.rig.sensor_width / 2.0 / lens
+            gap = (screen_coords(eye, target, corners)[0].min()
+                   - screen_coords(eye, target, pts)[0].max()) / (2.0 * tan_half)
+            if gap >= EXIT_SCREEN_GAP:
+                return side, target, eye, lens
+            side += 0.05
+            if side > 20.0:
+                raise ValueError("non riesco a separare M dal quadro")
+
+    def end_rotation(self):
+        """La rotazione della camera finale (in eye1, verso m_end)."""
+        return look_quat(self.m_end - self.eye1)
+
+    def grid_distance(self):
+        return float(np.linalg.norm(self.m_end - self.eye1)) + EXIT_GRID_BEHIND
+
+    def grid_poses(self, tris):
+        """La posa finale di ogni triangolo nel mondo: la griglia di GRID
+        (m_scene.grid_targets, come se la camera guardasse lungo +y) portata
+        davanti alla camera finale, sul piano perpendicolare al suo asse a
+        grid_distance(). Restituisce [(location, quaternione, scala)]."""
+        rig, distance = self.layout.rig, self.grid_distance()
+        w = rig.frame_width(self.lens_m, distance)
+        _, virtual, s = m_scene.grid_targets(tris, mathutils.Matrix.Identity(4), (0.0, 0.0), GRID, 0.0,
+                                             w, w / rig.aspect, GRID_FILL)
+        R = self.end_rotation().to_matrix()
+        # dal riferimento 'camera lungo +y' a quello della camera: x resta x, la
+        # profondita' (+y) va lungo -z, l'alto (+z) lungo +y
+        C = mathutils.Matrix(((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, -1.0, 0.0)))
+        q = (R @ C).to_quaternion()
+        eye = mathutils.Vector(self.eye1)
+        return [(eye + R @ mathutils.Vector((p.x, p.z, -distance)), q, s) for p in virtual]
+
+
 def build_camera_and_world(kit, layout, clip_end):
     """La camera dell'inquadratura, il fondo sfumato e il cielo."""
     cam = layout.rig.build(kit, layout.eye, clip_end=clip_end)
@@ -165,6 +337,41 @@ def build_camera_and_world(kit, layout, clip_end):
     m_scene.setup_sky_world(kit, math.radians(SKY_SUN_ELEVATION),
                             m_scene.sky_rotation(-mathutils.Vector(LIGHT_DIRECTION)), SKY_STRENGTH)
     return cam
+
+
+def build_painting(kit, image, layout):
+    """Il quadro: un rettangolo emissivo con l'immagine, nella posizione e
+    nella grandezza di `layout` (il poliedro dipinto combacia con M visto
+    dalla camera), fuori dall'illuminazione. Il materiale ha il nodo 'Fade'
+    (0 = invisibile, 1 = pieno, che e' il valore di partenza): le chiavi le
+    mette chi chiama, su m_scene.FADE_PATH. Restituisce (oggetto, materiale)."""
+    width, height = layout.painting_width, layout.painting_height
+    mesh = bpy.data.meshes.new(kit.name("painting"))
+    mesh.from_pydata([(-width / 2, 0, -height / 2), (width / 2, 0, -height / 2),
+                      (width / 2, 0, height / 2), (-width / 2, 0, height / 2)], [], [(0, 1, 2, 3)])
+    layer = mesh.uv_layers.new(name="UVMap")
+    for li, uv in zip(mesh.polygons[0].loop_indices, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        layer.data[li].uv = uv
+    mat, nodes, links = kit.new_material("painting")
+    out = nodes.new("ShaderNodeOutputMaterial")
+    tex = nodes.new("ShaderNodeTexImage")
+    tex.image = image
+    emit = nodes.new("ShaderNodeEmission")
+    clear = nodes.new("ShaderNodeBsdfTransparent")
+    mix = nodes.new("ShaderNodeMixShader")
+    mix.name = "Fade"
+    mix.inputs["Fac"].default_value = 1.0
+    links.new(tex.outputs["Color"], emit.inputs["Color"])
+    links.new(clear.outputs["BSDF"], mix.inputs[1])
+    links.new(emit.outputs["Emission"], mix.inputs[2])
+    links.new(mix.outputs["Shader"], out.inputs["Surface"])
+    bl_utils.set_blended(mat)
+    mesh.materials.append(mat)
+    obj = kit.new_object("painting", mesh)
+    center = layout.painting_center
+    obj.location = (center[0], layout.painting_depth, center[1])
+    m_scene.hide_from_light(obj)
+    return obj, mat
 
 
 def face_material(kit, face_img, uvs):

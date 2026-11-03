@@ -71,6 +71,14 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `v2/scene-1.py`    | scene_1 per la seconda versione del video (28 s): quadro via a 8 s, scheletro a 15, a 20 M lascia il posto alle facce dell'icosaedro, a 22 torna, esplosione in un secondo a 25; senza solidi platonici |
 | `v2/scene-2.py`    | scene_2 per la seconda versione (34 s), raccordata con v2/scene-1: tetraedro formato a 17 s, ottaedro a 21, icosaedro a 22, gli altri cinque a 30 |
 | `v2/scene-3.py`    | scene_3 per la seconda versione (10 s): i cinque deltaedri di Cundy escono a 3 s, il primo tetraedro a 4, gli altri da 8 |
+| `v2/scene-4.py`    | scene_4 per la seconda versione (17 s): scritte da 5 a 10 s, la stella va al suo posto e la platea compare fra 11 e 13 |
+| `v2/scene-6.py`    | scene_5b per la seconda versione (43 s): faccia sola a 5 s, 6 triangoli a 11, 12 a 17, grado di liberta' a 22, A e B combaciano a 29, M ricomposto a 32, staccato da 34 a 40 |
+| `v2/scene-7.py`    | M al centro dei tredici deltaedri di Saffaro su una spirale, quasi a contatto, la camera che gira stretta attorno a M in prima persona, all'altezza del suo centro, poi resta solo M che riprende i colori del quadro, e il quadro (24 s) |
+| `v3/scene1a.py`    | esperimento per l'inizio: M dietro il quadro, con la camera in asse su M, viene avanti e lo attraversa restando identico al poliedro dipinto |
+| `v3/scene1b.py`    | esperimento per l'inizio: la camera va di lato, M esce dal quadro in un secondo col contorno della sezione che brilla, poi M e quadro si separano e M gira |
+| `v3/scene2b.py`    | v2/scene-2 con M e l'icosaedro che crescono dentro il cerchio lasciato libero dai triangoli, e i deltaedri convessi come scheletri (cilindretti e sferette) con le facce semitrasparenti |
+| `v4/scene-1.py`    | M esce dal quadro (v3/scene1b), lo scheletro dell'icosaedro e le sue 20 facce a tubicini e vetro, poi i 240 triangoli migrano uno dopo l'altro nella griglia (32 s) |
+| `v4/scene-2.py`    | raccordata con v4/scene-1: i triangoli spariscono, M e l'icosaedro, poi sale un pavimento e i deltaedri convessi ci stanno appoggiati, nella disposizione di v3/scene2b (34 s, prima prova) |
 | `Creating_Helix.py`| lo script dello studente con l'elica di Boerdijk-Coxeter (handler di fotogramma), riferimento per scene_3 |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).

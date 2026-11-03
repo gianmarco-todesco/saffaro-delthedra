@@ -116,6 +116,58 @@ def vertex_degrees(n, faces):
     return deg
 
 
+def plane_section(V, faces, axis, value, weld=1e-6):
+    """La sezione della superficie (triangoli) col piano coordinata[axis] =
+    value: le curve chiuse, ognuna un array di punti in ordine (il primo non
+    e' ripetuto in fondo), in ordine di primo triangolo incontrato.
+
+    I vertici a meno di `weld` l'uno dall'altro si considerano lo stesso
+    (le mesh di M ripetono i vertici per faccia): due triangoli vicini tagliano
+    lo stesso spigolo nello stesso punto, ed e' cosi' che i pezzi si
+    concatenano. Un vertice che stesse esattamente sul piano si conta dalla
+    parte positiva, cosi' ogni spigolo e' tagliato al piu' una volta."""
+    V = np.asarray(V, dtype=float)
+    keys = {}
+    ids = np.array([keys.setdefault(tuple(np.round(v / weld).astype(np.int64)), len(keys)) for v in V])
+    d = V[:, axis] - value
+    side = d >= 0.0
+
+    def cut(a, b):
+        """Il punto in cui lo spigolo a-b attraversa il piano, e la sua chiave."""
+        key = (min(ids[a], ids[b]), max(ids[a], ids[b]))
+        return key, V[a] + (V[b] - V[a]) * (d[a] / (d[a] - d[b]))
+
+    links, points = {}, {}
+    for f in faces:
+        ends = []
+        for k in range(len(f)):
+            a, b = f[k], f[(k + 1) % len(f)]
+            if side[a] != side[b]:
+                key, p = cut(a, b)
+                points[key] = p
+                ends.append(key)
+        if len(ends) == 2:
+            links.setdefault(ends[0], []).append(ends[1])
+            links.setdefault(ends[1], []).append(ends[0])
+    loops, seen = [], set()
+    for start in links:
+        if start in seen:
+            continue
+        loop, prev, cur = [start], None, start
+        seen.add(start)
+        while True:
+            nxt = [n for n in links[cur] if n != prev]
+            if not nxt or nxt[0] == start:
+                break
+            prev, cur = cur, nxt[0]
+            if cur in seen:
+                break
+            seen.add(cur)
+            loop.append(cur)
+        loops.append(np.array([points[k] for k in loop]))
+    return loops
+
+
 # =============================================================================
 # LA PLATEA (cundy_deltahedra)
 # =============================================================================

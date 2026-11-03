@@ -37,6 +37,37 @@ class TestChain(unittest.TestCase):
         self.assertTrue(all((b, a) in edges for a, b in edges))
 
 
+class TestSection(unittest.TestCase):
+    OCTA_V = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+    OCTA_F = [(0, 2, 4), (2, 1, 4), (1, 3, 4), (3, 0, 4), (2, 0, 5), (1, 2, 5), (3, 1, 5), (0, 3, 5)]
+
+    def test_ottaedro_a_meta_altezza(self):
+        # appena sopra l'equatore: un quadrato, i quattro punti a z = 0.1
+        loops = deltahedra.plane_section(self.OCTA_V, self.OCTA_F, axis=2, value=0.1)
+        self.assertEqual(len(loops), 1)
+        L = loops[0]
+        self.assertEqual(len(L), 4)
+        np.testing.assert_allclose(L[:, 2], 0.1)
+        np.testing.assert_allclose(np.abs(L[:, :2]).sum(axis=1), 0.9)     # sul quadrato |x|+|y| = 0.9
+        # in ordine: due punti consecutivi stanno su una stessa faccia (distanza = lato)
+        for a, b in zip(L, np.roll(L, -1, axis=0)):
+            self.assertAlmostEqual(np.linalg.norm(a - b), 0.9 * np.sqrt(2), places=12)
+
+    def test_vertici_ripetuti_per_faccia(self):
+        # le facce coi vertici duplicati, come nella mesh di M: la sezione e' la stessa
+        V = [self.OCTA_V[i] for f in self.OCTA_F for i in f]
+        F = [(3 * k, 3 * k + 1, 3 * k + 2) for k in range(len(self.OCTA_F))]
+        loops = deltahedra.plane_section(V, F, axis=2, value=0.1)
+        self.assertEqual([len(L) for L in loops], [4])
+
+    def test_fuori_e_due_pezzi(self):
+        self.assertEqual(deltahedra.plane_section(self.OCTA_V, self.OCTA_F, axis=2, value=2.0), [])
+        # due ottaedri separati: due curve
+        V = self.OCTA_V + [(x + 5, y, z) for x, y, z in self.OCTA_V]
+        F = self.OCTA_F + [tuple(i + 6 for i in f) for f in self.OCTA_F]
+        self.assertEqual(len(deltahedra.plane_section(V, F, axis=2, value=-0.3)), 2)
+
+
 class TestWelded(unittest.TestCase):
     def test_vertici_saldati_e_centrati(self):
         # un tetraedro coi vertici ripetuti per faccia, come negli OBJ dei modelli

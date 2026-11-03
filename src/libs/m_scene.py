@@ -422,14 +422,18 @@ def fading_material(kit, suffix, color, roughness=0.5):
 def skeleton_mesh(kit, suffix, vertices, edges, radius, material, segments=16):
     """Lo scheletro di un poliedro in una sola mesh: un cilindretto per
     spigolo e una sferetta dello stesso raggio per vertice. Le sferette
-    chiudono i giunti, dove i cilindretti si incontrano ad angolo."""
+    chiudono i giunti, dove i cilindretti si incontrano ad angolo, e anche le
+    estremita' dei cilindretti, che quindi non hanno tappi: coi tappi, a
+    shading smussato, le normali sul bordo fanno la media fra il lato e il
+    tappo, e siccome ogni faccia laterale va da un capo all'altro il
+    cilindretto esce sfumato male per tutta la sua lunghezza."""
     import bmesh
     bm = bmesh.new()
     V = [mathutils.Vector(v) for v in vertices]
     for a, b in edges:
         d = V[b] - V[a]
         rot = d.to_track_quat('Z', 'Y').to_matrix().to_4x4()
-        bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=radius,
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=segments, radius1=radius,
                               radius2=radius, depth=d.length,
                               matrix=mathutils.Matrix.Translation((V[a] + V[b]) / 2) @ rot)
     for v in V:
@@ -696,15 +700,22 @@ def setup_sky_world(kit, sun_elevation, sun_rotation, strength, sun_size=None):
     return world
 
 
-def build_floor(kit, srgb, roughness, specular, size, y=0.0):
+def build_floor(kit, srgb, roughness, specular, size, y=0.0, fading=False):
     """Il pavimento: un quadrato di lato `size` nel piano z = 0, centrato in
     (0, y). `specular` e' quanto riflette il cielo: lo si guarda di sbieco, e a
     quegli angoli il riflesso (bianco) vince sul colore; col valore di default
-    (0.5) il pavimento esce grigio qualunque sia il suo colore."""
+    (0.5) il pavimento esce grigio qualunque sia il suo colore.
+
+    Con `fading` il materiale e' quello di fading_material, col nodo 'Fade'
+    (0 = invisibile, 1 = pieno, e parte da 0): le chiavi le mette chi chiama,
+    sul materiale del pavimento (obj.active_material)."""
     mesh = bpy.data.meshes.new(kit.name("floor"))
     h = size / 2.0
     mesh.from_pydata([(-h, -h, 0.0), (h, -h, 0.0), (h, h, 0.0), (-h, h, 0.0)], [], [(0, 1, 2, 3)])
-    mat = wire_material(kit, "floor", linear_rgba(srgb), roughness=roughness)
+    if fading:
+        mat = fading_material(kit, "floor", linear_rgba(srgb), roughness=roughness)
+    else:
+        mat = wire_material(kit, "floor", linear_rgba(srgb), roughness=roughness)
     bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
     bsdf.inputs["Specular IOR Level"].default_value = specular
     mesh.materials.append(mat)
