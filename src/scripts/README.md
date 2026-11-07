@@ -77,8 +77,11 @@ Stringa vuota = il testo non è salvato su disco (è un blocco "interno": usa
 | `v3/scene1a.py`    | esperimento per l'inizio: M dietro il quadro, con la camera in asse su M, viene avanti e lo attraversa restando identico al poliedro dipinto |
 | `v3/scene1b.py`    | esperimento per l'inizio: la camera va di lato, M esce dal quadro in un secondo col contorno della sezione che brilla, poi M e quadro si separano e M gira |
 | `v3/scene2b.py`    | v2/scene-2 con M e l'icosaedro che crescono dentro il cerchio lasciato libero dai triangoli, e i deltaedri convessi come scheletri (cilindretti e sferette) con le facce semitrasparenti |
-| `v4/scene-1.py`    | M esce dal quadro (v3/scene1b), lo scheletro dell'icosaedro e le sue 20 facce a tubicini e vetro, poi i 240 triangoli migrano uno dopo l'altro nella griglia (32 s) |
-| `v4/scene-2.py`    | raccordata con v4/scene-1: i triangoli spariscono, M e l'icosaedro, poi sale un pavimento e i deltaedri convessi ci stanno appoggiati, nella disposizione di v3/scene2b (34 s, prima prova) |
+| `v4/scene-1.py`    | la camera arretra dal quadro, il quadro gira su un arco e M ne esce col contorno della sezione che brilla; lo scheletro dell'icosaedro e le sue 20 facce, poi i 240 triangoli migrano uno dopo l'altro nella griglia (36 s) |
+| `v4/scene-2.py`    | raccordata con v4/scene-1: i triangoli spariscono, M e l'icosaedro, poi sale dal basso un pavimento inclinato (la camera resta dritta) e i deltaedri convessi ci stanno appoggiati, nella disposizione di v3/scene2b (38 s) |
+| `v4/scene-3.py`    | sul pavimento di v4/scene-2 i deltaedri non convessi; poi il composto di tre tetraedri si sdoppia, e ogni copia nuova cresce di un tetraedro, sempre piu' in fretta (17 s) |
+| `v4/scene-4.py`    | v2/scene-4 con le sferette sui vertici fin dall'inizio, piu' piccole; i due ai lati escono a 10 s, la stella va nella platea e compaiono gli altri a 13; nell'ultimo secondo svaniscono tutti, uno dopo l'altro (18 s) |
+| `v4/scene-5.py`    | il quadro senza il poliedro dipinto, con M che gira al suo posto; in dissolvenza il libro di Saffaro (Scienza & Tecnica 87/88): si apre la copertina, poi le due meta' si aprono come un sipario e dietro compaiono i cinque deltaedri di scene_5a (18 s) |
 | `Creating_Helix.py`| lo script dello studente con l'elica di Boerdijk-Coxeter (handler di fotogramma), riferimento per scene_3 |
 
 Materiale scartato/sperimentale sta in [`../../trash`](../../trash).

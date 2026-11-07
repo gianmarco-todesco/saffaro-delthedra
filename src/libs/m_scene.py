@@ -622,6 +622,59 @@ def setup_glare(kit, scene, threshold=1.0, strength=1.0, size=0.5):
     return ng
 
 
+def setup_aov_glow(kit, scene, aov, strength=1.0, size=0.5, soften=0.0, soften_weight=0.0):
+    """Il bagliore attorno a quello che i materiali scrivono nel passaggio AOV
+    `aov` (un ShaderNodeOutputAOV, di tipo colore): il compositor fa il Bloom
+    di quel passaggio e lo somma all'immagine. A differenza di setup_glare non
+    serve che quello che brilla superi una soglia: puo' restare sotto 1, e il
+    suo bordo resta antialiasato (un'emissione molto forte satura anche i
+    pixel coperti in parte, e si vedono i gradini); e non brilla nient'altro,
+    neanche i riflessi forti. Il passaggio, essendo filtrato come l'immagine,
+    rispetta le occlusioni e l'antialiasing. Con soften > 0 si somma anche
+    il passaggio sfocato di soften pixel (gaussiana), per soften_weight: un
+    alone stretto e forte che si mangia il bordo di quello che brilla. Sostituisce il
+    compositor della scena, come setup_glare."""
+    if not hasattr(scene, "compositing_node_group"):
+        raise RuntimeError("setup_aov_glow richiede Blender 5.x (scene.compositing_node_group)")
+    layer = scene.view_layers[0]
+    if aov not in layer.aovs:
+        item = layer.aovs.add()
+        item.name, item.type = aov, 'COLOR'
+    name = kit.name("compositor")
+    ng = bpy.data.node_groups.get(name) or bpy.data.node_groups.new(name, 'CompositorNodeTree')
+    ng.nodes.clear()
+    ng.interface.clear()
+    ng.interface.new_socket("Image", in_out='OUTPUT', socket_type='NodeSocketColor')
+    layers = ng.nodes.new("CompositorNodeRLayers")
+    layers.scene, layers.layer = scene, layer.name
+    glare = ng.nodes.new("CompositorNodeGlare")
+    glare.inputs["Type"].default_value = 'Bloom'
+    _socket(glare.inputs, "Highlights Threshold").default_value = 0.0
+    glare.inputs["Strength"].default_value = strength
+    glare.inputs["Size"].default_value = size
+    ng.links.new(layers.outputs[aov], glare.inputs["Image"])
+
+    def add(image, extra, weight):
+        mix = ng.nodes.new("ShaderNodeMix")
+        mix.data_type, mix.blend_type = 'RGBA', 'ADD'
+        mix.inputs[0].default_value = weight
+        ng.links.new(image, mix.inputs[6])
+        ng.links.new(extra, mix.inputs[7])
+        return mix.outputs[2]
+
+    image = add(layers.outputs["Image"], glare.outputs["Glare"], 1.0)
+    if soften > 0.0:
+        blur = ng.nodes.new("CompositorNodeBlur")
+        blur.inputs["Size"].default_value = (soften, soften)
+        ng.links.new(layers.outputs[aov], blur.inputs["Image"])
+        image = add(image, blur.outputs["Image"], soften_weight)
+    out = ng.nodes.new("NodeGroupOutput")
+    ng.links.new(image, out.inputs[0])
+    scene.compositing_node_group = ng
+    scene.render.use_compositing = True
+    return ng
+
+
 # =============================================================================
 # LUCE E MONDO
 # =============================================================================

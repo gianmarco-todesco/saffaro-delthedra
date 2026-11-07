@@ -1,6 +1,6 @@
 """
 v4/scene-2.py -- comincia dove finisce v4/scene-1 (i 240 triangoli nella
-griglia, davanti alla camera di lato), e porta all'icosaedro, a M, al
+griglia, davanti alla camera in asse con M), e porta all'icosaedro, a M, al
 tetraedro e agli otto deltaedri convessi, che stanno su un pavimento. E'
 v3/scene2b portata sulla camera di v4 e sul pavimento.
 
@@ -10,16 +10,19 @@ LA SCALETTA (secondi, a 24 fps)
    0          l'ultimo fotogramma di v4/scene-1: la griglia, la stessa camera
    0.3 - 5.5  i triangoli si rimpiccioliscono fino a sparire, dal centro della
               griglia verso la periferia
-   5          l'icosaedro cresce (ease out), a sinistra del centro; M mezzo
-              secondo dopo, a destra; girano su se stessi
+   4          l'icosaedro cresce (ease out), a sinistra del centro; M a 5, a
+              destra; girano su se stessi
   17 - 19     M e l'icosaedro escono di lato
-  18          il tetraedro compare, appoggiato sul pavimento, che sale da
-              sotto (18 - 19.5); la camera si inclina piano verso il basso
-              (18 - 22), perche' il pavimento riempia l'immagine
-  23          entra l'ottaedro (da sinistra), scivolando sul pavimento
-  24          entra l'icosaedro (da destra)
+  18          il tetraedro compare al centro dell'immagine. La camera non si
+              muove piu' per tutta la scena; dal basso sale piano il
+              pavimento: il suo bordo attraversa l'immagine (18 - 21), poi
+              il pavimento si ferma sotto il tetraedro (21 - 21.75)
+  22          entra l'ottaedro (da sinistra), scivolando sul pavimento
+  23          entra l'icosaedro (da destra); mentre arrivano il tetraedro si
+              allontana (22 - 24.8), finche' i tre, nell'immagine, stanno ai
+              vertici di un triangolo equilatero
   32          crescono gli altri cinque, sul pavimento: a 33 s ci sono tutti
-  34          fine
+  38          fine
 
 --------------------------------------------------------------------------
 LE SCELTE
@@ -31,16 +34,29 @@ LE SCELTE
   passa per il centro dove si era fermato M, a PAIR_RADIUS, come in
   v3/scene2b. Lo script controlla che crescendo non tocchino i triangoli
   ancora presenti (nell'immagine) e dice di quanto ci passano.
-* Il pavimento e' quello di v2/scene-4 (ardesia), FLOOR_BELOW sotto il
-  centro di M. Sale da FLOOR_RISE piu' in basso.
+* La camera e' sempre quella dove finisce v4/scene-1, dritta. Il pavimento
+  (quello di v2/scene-4, ardesia) e' inclinato verso di lei: e' come se la
+  camera guardasse dall'alto (CAMERA_ELEVATION gradi). I conti si fanno in
+  quel mondo 'virtuale', con la camera alta che guarda il pavimento
+  orizzontale FLOOR_BELOW sotto il centro di M, e il pavimento e gli otto
+  sono figli di un perno (floor_frame) che porta quel mondo davanti alla
+  camera vera: la rotazione che gira la camera alta su quella dritta.
+  L'immagine finale e' quella che si avrebbe con la camera inclinata. Il
+  sole gira con loro, perche' le ombre sul pavimento siano le stesse.
+* Il pavimento sale dal basso: si sposta lungo l'alto dell'immagine, e
+  all'inizio e' tanto in basso che il suo bordo lontano sta sotto
+  l'inquadratura (un piano inclinato verso la camera, se e' grande, arriva
+  quasi all'orizzonte comunque lo si abbassi: si vede salire il bordo).
+  Il moto ha due tempi: in FLOOR_IN il bordo lontano sale da sotto a sopra
+  l'inquadratura, poi in FLOOR_SETTLE il pavimento, che riempie gia'
+  l'immagine, finisce di salire fino al tetraedro.
 * Gli otto deltaedri convessi stanno appoggiati sul pavimento: il vertice
-  piu' basso lo sfiora, e girando attorno alla verticale continua a
-  sfiorarlo. La disposizione e' quella di v3/scene2b nell'immagine: per ogni
-  pezzo si prende il suo punto nell'immagine (la fila dei tre gruppi, larga
-  WIDTH_FILL, vista dalla camera finale) e lo si porta sul pavimento lungo
-  il raggio della camera. Per questo la camera finale guarda piu' in basso
-  (CAMERA_ELEVATION): i pezzi piu' in alto nell'immagine stanno piu'
-  lontani, e il raggio che li raggiunge deve scendere.
+  piu' basso lo sfiora, e girando attorno alla normale del pavimento
+  continua a sfiorarlo. La disposizione e' quella di v3/scene2b
+  nell'immagine: per ogni pezzo si prende il suo punto nell'immagine (la
+  fila dei tre gruppi, larga WIDTH_FILL) e lo si porta sul pavimento lungo
+  il raggio della camera alta. Il tetraedro parte dal centro dell'immagine,
+  sul pavimento, e va al suo posto.
 * Gli otto sono scheletri come in v3/scene2b (cilindretti, sferette, facce
   semitrasparenti) e fanno ombra sul pavimento; il sole del racconto ha qui
   il disco largo (SUN_SIZE_DEG), per ombre morbide.
@@ -112,18 +128,19 @@ FRAME_START = 1
 # --- la scaletta, in secondi ---
 VANISH          = (0.3, 5.5)     # i triangoli spariscono, dal centro alla periferia
 VANISH_SECONDS  = 0.8            # quanto ci mette un triangolo a rimpicciolirsi
-PAIR_IN         = {"ico": 5.0, "M": 5.5}   # quando cominciano a crescere
+PAIR_IN         = {"ico": 4.0, "M": 5.0}   # quando cominciano a crescere
 PAIR_GROW       = 2.0            # in tanto (ease out)
 SPLIT           = (17.0, 19.0)   # M e l'icosaedro escono di lato
-TETRA_IN        = (18.0, 19.0)   # il tetraedro cresce, al suo posto sul pavimento
-FLOOR_IN        = (18.0, 19.5)   # il pavimento sale
-CAMERA_TILT     = (18.0, 22.0)   # la camera si inclina verso il basso
-SLIDE_IN        = {"octa": 23.0, "ico_ring": 24.0}   # entrano scivolando sul pavimento
+TETRA_IN        = (18.0, 19.0)   # il tetraedro cresce, al centro dell'immagine
+FLOOR_IN        = (18.0, 21.0)   # il bordo del pavimento sale per tutta l'immagine...
+FLOOR_SETTLE    = (21.0, 21.75)  # ... poi il pavimento si ferma sotto il tetraedro
+SLIDE_IN        = {"octa": 22.0, "ico_ring": 23.0}   # entrano scivolando sul pavimento
 SLIDE_SECONDS   = 1.8
+TETRA_MOVE      = (22.0, 24.8)   # intanto il tetraedro va al suo posto
 FIVE_IN         = 32.0           # crescono gli altri cinque...
 FIVE_GAP        = 0.1            # ... uno dopo l'altro...
 GROW_SECONDS    = 0.6            # ... ognuno in tanto: a 33 s ci sono tutti
-END_AT          = 34.0
+END_AT          = 38.0
 SPIN_SECONDS_PER_TURN = 20.0     # ognuno su se stesso
 
 # --- la texture (M e l'icosaedro della coppia, come v3/scene2b) ---
@@ -175,10 +192,10 @@ FLOOR_ROUGHNESS = 0.85
 FLOOR_SPECULAR  = 0.05
 FLOOR_SIZE      = 400.0
 FLOOR_BELOW     = 2.2            # il pavimento sta tanto sotto il centro di M
-FLOOR_RISE      = 6.0            # ... e sale da tanto piu' in basso
+FLOOR_RISE_MARGIN = 2.0          # il bordo lontano parte tanto sotto l'inquadratura, e arriva tanto sopra
 SUN_SIZE_DEG    = 8.0
 BACKGROUND_DEPTH = 300.0
-CAMERA_ELEVATION = 24.0          # la camera finale: gradi sopra l'orizzonte
+CAMERA_ELEVATION = 24.0          # la camera 'virtuale': gradi sopra l'orizzonte del pavimento
 
 
 # =============================================================================
@@ -401,35 +418,35 @@ def build():
     ev = story.ExitView(md, painting_img.size)
     rig = ev.layout.rig
 
-    # --- la camera: da quella finale di v4/scene-1 a quella del pavimento ---
+    # --- la camera: quella finale di v4/scene-1, ferma ---
     eye1, m_end, lens = np.asarray(ev.eye1), np.asarray(ev.m_end), ev.lens_m
     b1 = Basis(eye1, m_end)
     d0 = float(np.linalg.norm(m_end - eye1))
-    back1 = (eye1 - m_end) / d0
-    back_h = np.array([back1[0], back1[1], 0.0]) / math.hypot(back1[0], back1[1])
-    e1 = math.asin(back1[2])
-    floor_z = m_end[2] - FLOOR_BELOW
-    target2 = np.array([m_end[0], m_end[1], floor_z + 1.0])
-    e2 = math.radians(CAMERA_ELEVATION)
-    eye2 = orbit(target2, back_h, e2, d0)
-    b2 = Basis(eye2, target2)
-
     cam = rig.build(KIT, Vector(eye1), clip_end=BACKGROUND_DEPTH + 20.0)
     cam.data.lens = lens
     cam.rotation_mode = 'QUATERNION'
-    keys_loc, keys_rot = [], []
-    for f in frames:
-        w = smoother(ramp(time_of(f), *CAMERA_TILT))
-        target = m_end + (target2 - m_end) * w
-        eye = orbit(target, back_h, e1 + (e2 - e1) * w, d0)
-        keys_loc.append((f, tuple(eye)))
-        keys_rot.append((f, tuple(story.look_quat(target - eye))))
-    bl_anim.key_value(cam, "location", keys_loc, interpolation='LINEAR')
-    bl_anim.key_value(cam, "rotation_quaternion", keys_rot, interpolation='LINEAR')
+    cam.rotation_quaternion = story.look_quat(m_end - eye1)
+
+    # --- il mondo del pavimento: la camera alta che lo guarda, e il perno che
+    # la porta sulla camera vera ---
+    back1 = (eye1 - m_end) / d0
+    back_h = np.array([back1[0], back1[1], 0.0]) / math.hypot(back1[0], back1[1])
+    floor_z = m_end[2] - FLOOR_BELOW
+    target2 = np.array([m_end[0], m_end[1], floor_z + 1.0])
+    eye2 = orbit(target2, back_h, math.radians(CAMERA_ELEVATION), d0)
+    b2 = Basis(eye2, target2)
+    R = np.column_stack([b1.r, b1.f, b1.u]) @ np.column_stack([b2.r, b2.f, b2.u]).T
+    to_camera = mathutils.Matrix.Translation(Vector(eye1 - R @ eye2)) @ mathutils.Matrix(R.tolist()).to_4x4()
+    frame = KIT.new_object("floor_frame")
+    frame.matrix_world = to_camera
+
+    # il sole: dal centro verso il sole come in story, girato col pavimento
+    e = math.radians(story.SKY_SUN_ELEVATION)
+    h = np.array([-story.LIGHT_DIRECTION[0], -story.LIGHT_DIRECTION[1], 0.0])
+    sun = R @ (h / np.linalg.norm(h) * math.cos(e) + np.array([0.0, 0.0, math.sin(e)]))
     m_scene.build_background(KIT, rig, cam, lens, BACKGROUND_DEPTH,
                              story.BACKGROUND_CORNERS_SRGB, story.BACKGROUND_BLEED)
-    m_scene.setup_sky_world(KIT, math.radians(story.SKY_SUN_ELEVATION),
-                            m_scene.sky_rotation(-Vector(story.LIGHT_DIRECTION)), story.SKY_STRENGTH,
+    m_scene.setup_sky_world(KIT, math.asin(sun[2]), m_scene.sky_rotation(sun), story.SKY_STRENGTH,
                             sun_size=math.radians(SUN_SIZE_DEG))
 
     # --- i triangoli, dove li lascia v4/scene-1 ---
@@ -493,12 +510,31 @@ def build():
                           interpolation='LINEAR')
         bl_anim.key_visibility(obj, [(FRAME_START, False), (f0, True), (frame_of(SPLIT[1]) + 1, False)])
 
-    # --- il pavimento: sale da sotto ---
+    # --- il pavimento: sale da sotto, lungo l'alto dell'immagine ---
     floor = m_scene.build_floor(KIT, FLOOR_SRGB, FLOOR_ROUGHNESS, FLOOR_SPECULAR, FLOOR_SIZE)
-    floor.location = (target2[0], target2[1], floor_z)
+    floor.parent = frame
+    home_floor = np.array([target2[0], target2[1], floor_z])
+    # di quanto abbassarlo (lungo l'alto dell'immagine) perche' il bordo
+    # lontano stia sotto l'inquadratura (rise), e di quanto perche' stia sopra
+    # (rise_top): v u - o = depth tan_v nell'immagine e' il bordo in alto
+    tan_v = rig.frame_width(lens, 1.0) / rig.aspect / 2.0
+    half = FLOOR_SIZE / 2.0
+    rise, rise_top = 0.0, 0.0
+    for cx, cy in ((-half, -half), (half, -half), (half, half), (-half, half)):
+        v = home_floor + np.array([cx, cy, 0.0]) - eye2
+        depth = v @ b2.f
+        if depth > 0.0:
+            rise = max(rise, v @ b2.u + depth * tan_v + FLOOR_RISE_MARGIN)
+            rise_top = max(rise_top, v @ b2.u - depth * tan_v - FLOOR_RISE_MARGIN)
+
+    def floor_offset(t):
+        if t <= FLOOR_IN[1]:
+            return rise_top + (rise - rise_top) * (1.0 - smoother(ramp(t, *FLOOR_IN)))
+        return rise_top * (1.0 - smoother(ramp(t, *FLOOR_SETTLE)))
+
     bl_anim.key_value(floor, "location",
-                      [(f, (target2[0], target2[1], floor_z - FLOOR_RISE * (1.0 - ease_out(ramp(time_of(f), *FLOOR_IN)))))
-                       for f in range(frame_of(FLOOR_IN[0]), frame_of(FLOOR_IN[1]) + 1)],
+                      [(f, tuple(home_floor - b2.u * floor_offset(time_of(f))))
+                       for f in range(frame_of(FLOOR_IN[0]), frame_of(FLOOR_SETTLE[1]) + 1)],
                       interpolation='LINEAR')
     bl_anim.key_visibility(floor, [(FRAME_START, False), (frame_of(FLOOR_IN[0]), True)])
 
@@ -507,9 +543,20 @@ def build():
     for n, key in enumerate(SKELETONS, start=2):
         V, faces = polyhedron_geometry(key, md)
         obj = skeleton_objects(key, V, faces)
+        obj.parent = frame
         height = floor_z - float(V[:, 2].min()) * r            # il vertice piu' basso sul pavimento
         home = on_floor(b2, d0, layout2[key], height)
-        if key in SLIDE_IN:
+        if key == "tetra":
+            # dal centro dell'immagine al suo posto
+            centre = on_floor(b2, d0, (0.0, 0.0), height)
+            obj.location = tuple(centre)
+            bl_anim.key_value(obj, "location",
+                              [(f, tuple(centre + (home - centre) * smoother(ramp(time_of(f), *TETRA_MOVE))))
+                               for f in range(frame_of(TETRA_MOVE[0]), frame_of(TETRA_MOVE[1]) + 1)],
+                              interpolation='LINEAR')
+            bl_anim.key_value(obj, "scale", [(frame_of(TETRA_IN[0]), (0.0,) * 3), (frame_of(TETRA_IN[1]), (r,) * 3)])
+            appear = TETRA_IN[0]
+        elif key in SLIDE_IN:
             # da fuori dall'inquadratura, scivolando sul pavimento lungo la sua orizzontale
             _, _, depth = b2.tangents(home)
             side = -1.0 if key == "octa" else 1.0
@@ -524,9 +571,9 @@ def build():
             appear = t0
         else:
             obj.location = tuple(home)
-            appear = TETRA_IN[0] if key == "tetra" else FIVE_IN + FIVE.index(key) * FIVE_GAP
-            grow = TETRA_IN[1] - TETRA_IN[0] if key == "tetra" else GROW_SECONDS
-            bl_anim.key_value(obj, "scale", [(frame_of(appear), (0.0,) * 3), (frame_of(appear + grow), (r,) * 3)])
+            appear = FIVE_IN + FIVE.index(key) * FIVE_GAP
+            bl_anim.key_value(obj, "scale", [(frame_of(appear), (0.0,) * 3),
+                                             (frame_of(appear + GROW_SECONDS), (r,) * 3)])
         f0 = frame_of(appear)
         obj.rotation_mode = 'XYZ'
         phase = 2.0 * math.pi * ((n * 0.618034) % 1.0)
@@ -536,8 +583,9 @@ def build():
         bl_anim.key_visibility(obj, [(FRAME_START, False), (f0, True)])
 
     scene.frame_set(FRAME_START)
-    print(f"[scene-2 v4] frame {FRAME_START}-{FRAME_END} a {FPS} fps ({END_AT:.0f} s); camera da "
-          f"{CAMERA_TILT[0]} a {CAMERA_TILT[1]} s, da {math.degrees(e1):.1f} a {CAMERA_ELEVATION} gradi")
+    print(f"[scene-2 v4] frame {FRAME_START}-{FRAME_END} a {FPS} fps ({END_AT:.0f} s); camera ferma, "
+          f"pavimento inclinato di {CAMERA_ELEVATION} gradi, sale di {rise:.1f} ({rise - rise_top:.1f} col bordo "
+          f"in vista)")
     print(f"[scene-2 v4] la coppia passa dai triangoli ancora presenti, al minimo, a {margin_min:.2f} "
           f"(unita' del piano di M; negativo = li tocca)")
     print(f"[scene-2 v4] gli otto di raggio {r:.3f}; pavimento a z = {floor_z:.2f}")

@@ -194,21 +194,20 @@ class AxisLayout:
 
 
 # =============================================================================
-# L'USCITA DAL QUADRO (v4): M esce dal quadro verso la camera di lato
+# L'USCITA DAL QUADRO (v4): il quadro gira, M ne esce e si ferma al centro
 # =============================================================================
 #
 # I conti che v4/scene-1 e v4/scene-2 devono fare uguali perche' la seconda
-# cominci dove finisce la prima: dove si ferma M, la camera di lato e quella
-# finale (girata su M), e la griglia dei 240 triangoli davanti a lei.
+# cominci dove finisce la prima: dove sta M, la camera (che arretra lungo il
+# suo asse dal poliedro dipinto a tutto il quadro), il quadro che gira su un
+# arco di cerchio portandosi dietro M, M che ne esce lungo la normale
+# fermandosi sull'asse della camera, e la griglia dei 240 triangoli davanti
+# alla camera.
 
-EXIT_CROSS_MARGIN = 0.05         # all'inizio M e' subito dietro il quadro
-EXIT_FINAL_GAP    = 1.0          # dopo l'uscita, fra il retro di M e il quadro
-EXIT_SCREEN_GAP   = 0.05         # ... e fra M e il quadro nell'immagine (frazione della larghezza)
-EXIT_SIDE_ANGLE   = 35.0         # la camera di lato: gradi attorno alla verticale (verso destra)
-EXIT_ELEVATION    = 8.0          # ... gradi in alto
-EXIT_DISTANCE     = 14.0         # ... dal punto che guarda
-EXIT_FRAME_FILL   = 0.85         # ... e quanta immagine occupano M e il quadro
-EXIT_M_FILL       = 0.7          # alla fine, quanta ne occupa la gabbia di M
+EXIT_CROSS_MARGIN = 0.05         # M e' subito dietro il quadro
+EXIT_FRAME_MARGIN = 1.10         # alla fine il quadro intero, con questo margine
+EXIT_TILT         = 60.0         # gradi: il quadro gira in senso orario (visto dall'alto)
+EXIT_FINAL_GAP    = 0.1          # alla fine, fra M e il quadro
 EXIT_GRID_BEHIND  = 3.0          # la griglia e' tanto piu' lontana del centro di M
 
 
@@ -248,63 +247,93 @@ def look_quat(direction):
 class ExitView:
     """Le posizioni dell'uscita dal quadro di v4/scene-1, da M e dalle
     dimensioni del quadro. Attributi: layout (AxisLayout), plane (il piano
-    del quadro), s0 (la scala di M), y0 e y1 (dove sta M prima e dopo),
-    side (di quanto M va di lato, verso -x), m_end (il centro di M dopo),
-    target1, eye1, lens1 (la camera di lato), lens_m (la camera finale: sta
-    in eye1 e guarda m_end), ico_scale (la gabbia di M)."""
+    del quadro, all'inizio), P (i vertici di M nella posa del quadro), s0 (la
+    scala di M), m_start (il centro di M all'inizio, subito dietro il quadro),
+    m_turned (quando comincia a uscire), m_end (alla fine, sull'asse della
+    camera), eye0 ed eye1 (la camera all'inizio, davanti al centro del
+    quadro, che ne riempie esattamente l'altezza, e alla fine, sull'asse di
+    M, col quadro intero e un margine), lens_m
+    (la focale, sempre quella), painting_centre (il centro del quadro
+    all'inizio), pivot e turn_radius (il centro e il raggio dell'arco del
+    quadro), exit_dir ed exit_distance (la normale del quadro girato, verso
+    la camera, e quanto M ci si muove), ico_scale (la gabbia di M).
+
+    Il movimento ha due tempi. 'turn' (da 0 a 1): il centro del quadro va su
+    un arco di cerchio orizzontale, e il quadro resta perpendicolare alla
+    tangente; all'inizio si allontana dalla camera, poi piega a destra, fino
+    a girare di EXIT_TILT. E' una rotazione attorno al centro del cerchio
+    (pivot, a destra del quadro), e M, ancora dietro, gli va dietro come se ci
+    fosse attaccato. 'out' (da 0 a 1): M ne esce perpendicolare al quadro,
+    di exit_distance; se comincia prima che il quadro si fermi, la
+    perpendicolare gira col quadro. Il raggio e' quello per cui alla fine M
+    sta sull'asse della camera."""
 
     def __init__(self, md, painting_size):
-        self.layout = layout = AxisLayout(md, painting_size)
+        self.layout = layout = AxisLayout(md, painting_size, EXIT_FRAME_MARGIN)
         self.plane = plane = layout.painting_depth
-        P = model_points(md)
-        self.P = P
-        eye0 = np.asarray(layout.eye)
-        ymin, ymax = P[:, 1].min(), P[:, 1].max()
-        # il punto piu' vicino di M a EXIT_CROSS_MARGIN dietro il piano: y + s(y) ymin,
-        # con s(y) = (y - eye.y) / (0 - eye.y), e' lineare in y
-        k = -eye0[1]
-        self.y0 = (plane + EXIT_CROSS_MARGIN - ymin) / (1.0 + ymin / k)
-        self.s0 = (self.y0 + k) / k
-        self.y1 = plane - EXIT_FINAL_GAP - self.s0 * ymax
-        radius = self.s0 * float(np.linalg.norm(P, axis=1).max())
-        sphere = [radius * np.array(v) for v in
-                  ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))]
-        self.side, self.target1, self.eye1, self.lens1 = self._side_view(sphere)
-        self.m_end = np.array([-self.side, self.y1, 0.0])
-        self.ico_scale = geometry.enclosing_scale(md.vertices, geometry.Polyhedron.ico) * ICO_MARGIN
-        cage = [self.m_end + self.s0 * self.ico_scale * np.array(v) for v in
-                ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))]
-        self.lens_m = lens_to_fit(layout.rig, self.eye1, self.m_end, cage, EXIT_M_FILL)
-
-    def _side_view(self, m_points):
-        """La camera laterale: di quanto M va di lato (verso -x), il punto
-        guardato, la camera e la focale. Lo spostamento cresce a passi di 5 cm
-        finche' fra M e il quadro (fermo) resta EXIT_SCREEN_GAP della
-        larghezza dell'immagine. `m_points` sono i punti di M attorno al suo
-        centro."""
-        layout = self.layout
+        self.P = P = model_points(md)
+        self.eye1 = np.asarray(layout.eye, dtype=float)
+        ymin = P[:, 1].min()
+        # il punto piu' vicino di M a EXIT_CROSS_MARGIN dietro il piano, con la
+        # scala per cui M visto da eye1 (la camera da cui il quadro e'
+        # dipinto) combacia col dipinto:
+        # y + s(y) ymin, con s(y) = (y - eye.y) / (0 - eye.y), e' lineare in y
+        k = -self.eye1[1]
+        y0 = (plane + EXIT_CROSS_MARGIN - ymin) / (1.0 + ymin / k)
+        self.s0 = (y0 + k) / k
+        self.m_start = np.array([0.0, y0, 0.0])
+        self.lens_m = layout.lens
+        # all'inizio la camera, con la stessa focale e sempre lungo +y, sta
+        # davanti al centro del quadro, tanto vicina che il quadro ne riempie
+        # esattamente l'altezza: arretrando va sull'asse di M
+        rig = layout.rig
         px, pz = layout.painting_center
-        hw, hh = layout.painting_width / 2.0, layout.painting_height / 2.0
-        p_centre = np.array([px, layout.painting_depth, pz])
-        corners = [p_centre + np.array([sx * hw, 0.0, sz * hh]) for sx in (-1, 1) for sz in (-1, 1)]
-        side = 0.0
-        while True:
-            m_end = np.array([-side, self.y1, 0.0])
-            target = (m_end + p_centre) / 2.0
-            eye = target + camera_back(EXIT_SIDE_ANGLE, EXIT_ELEVATION) * EXIT_DISTANCE
-            pts = [m_end + q for q in m_points]
-            lens = lens_to_fit(layout.rig, eye, target, corners + pts, EXIT_FRAME_FILL)
-            tan_half = layout.rig.sensor_width / 2.0 / lens
-            gap = (screen_coords(eye, target, corners)[0].min()
-                   - screen_coords(eye, target, pts)[0].max()) / (2.0 * tan_half)
-            if gap >= EXIT_SCREEN_GAP:
-                return side, target, eye, lens
-            side += 0.05
-            if side > 20.0:
-                raise ValueError("non riesco a separare M dal quadro")
+        depth1 = plane - self.eye1[1]
+        depth0 = depth1 * layout.painting_height / (rig.frame_width(self.lens_m, depth1) / rig.aspect)
+        self.eye0 = np.array([px, plane - depth0, pz])
+        self.painting_centre = c = np.array([px, plane, pz])
+        self.ico_scale = geometry.enclosing_scale(md.vertices, geometry.Polyhedron.ico) * ICO_MARGIN
+        a = math.radians(EXIT_TILT)
+        self.exit_dir = n = np.array([-math.sin(a), -math.cos(a), 0.0])
+        # M esce finche' tutto M sta EXIT_FINAL_GAP davanti al quadro, comunque
+        # giri poi attorno alla verticale: conta il raggio del cilindro
+        # verticale che lo contiene. All'inizio il centro di M e' y0 - plane
+        # dietro il quadro, e il quadro, girando, se lo porta dietro.
+        radius = self.s0 * float(np.linalg.norm(P[:, :2], axis=1).max())
+        self.exit_distance = d = (y0 - plane) + radius + EXIT_FINAL_GAP
+        # il raggio r del cerchio, col centro in c + (r, 0, 0): la x di M alla
+        # fine, c.x + r + (u.x - r) cos a + u.y sin a - d sin a con u = m_start
+        # - c, e' lineare in r, e deve essere zero
+        u = self.m_start - c
+        self.turn_radius = r = (d * math.sin(a) - u[1] * math.sin(a) - u[0] * math.cos(a) - c[0]) \
+            / (1.0 - math.cos(a))
+        self.pivot = c + np.array([r, 0.0, 0.0])
+        self.m_turned = np.asarray(self.carry(1.0) @ mathutils.Vector(self.m_start))
+        self.m_end = self.m_turned + d * n
+
+    def carry(self, turn):
+        """Il movimento del quadro (e di M con lui) alla frazione `turn`: la
+        rotazione attorno a pivot che porta la posa iniziale in quella
+        attuale."""
+        k = mathutils.Vector(self.pivot)
+        return (mathutils.Matrix.Translation(k)
+                @ mathutils.Matrix.Rotation(-math.radians(EXIT_TILT) * turn, 4, 'Z')
+                @ mathutils.Matrix.Translation(-k))
+
+    def painting_matrix(self, turn):
+        """La matrice mondo del quadro alla frazione `turn`."""
+        return self.carry(turn) @ mathutils.Matrix.Translation(self.painting_centre)
+
+    def m_frame(self, turn, out):
+        """La posizione e la rotazione di M (senza scala e senza il suo giro):
+        la matrice mondo del suo centro alle frazioni `turn` e `out`. L'uscita
+        e' lungo la normale del quadro nella posa iniziale, -y, e il quadro se
+        la porta dietro: a turn = 1 e' exit_dir."""
+        local = self.m_start + np.array([0.0, -self.exit_distance * out, 0.0])
+        return self.carry(turn) @ mathutils.Matrix.Translation(local)
 
     def end_rotation(self):
-        """La rotazione della camera finale (in eye1, verso m_end)."""
+        """La rotazione della camera (in eye1, verso m_end: lungo +y)."""
         return look_quat(self.m_end - self.eye1)
 
     def grid_distance(self):
@@ -313,7 +342,7 @@ class ExitView:
     def grid_poses(self, tris):
         """La posa finale di ogni triangolo nel mondo: la griglia di GRID
         (m_scene.grid_targets, come se la camera guardasse lungo +y) portata
-        davanti alla camera finale, sul piano perpendicolare al suo asse a
+        davanti alla camera, sul piano perpendicolare al suo asse a
         grid_distance(). Restituisce [(location, quaternione, scala)]."""
         rig, distance = self.layout.rig, self.grid_distance()
         w = rig.frame_width(self.lens_m, distance)
