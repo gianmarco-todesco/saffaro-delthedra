@@ -4,6 +4,23 @@ import os
 from mathutils import Vector, Matrix
 
 
+# ==========================================
+# PULIZIA COMPLETA DELLA SCENA
+# ==========================================
+
+# Elimina tutti gli oggetti
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete(use_global=False)
+
+# Elimina tutte le collection non predefinite
+for collection in list(bpy.data.collections):
+    if collection.name != "Collection":
+        bpy.data.collections.remove(collection)
+
+print("Scena completamente pulita!")
+
+
+
 def fcurves_of(obj):
     """Le F-Curve dell'azione di `obj`, o None se non e' animato.
 
@@ -412,6 +429,11 @@ if collection is None:
         f"Importazione completata: "
         f"{imported_count} mesh."
     )
+    # Nasconde la collection nel viewport
+    collection.hide_viewport = True
+
+    # Esclude la collection dal rendering
+    collection.hide_render = True
 
 else:
 
@@ -529,6 +551,11 @@ if collection is None:
         f"Importazione completata: "
         f"{imported_count} mesh."
     )
+    # Nasconde la collection nel viewport
+    collection.hide_viewport = True
+
+    # Esclude la collection dal rendering
+    collection.hide_render = True
 
 else:
 
@@ -604,11 +631,23 @@ def assegna_colori_poligoni():
     print('assegno colori')
 
     palette = [
-        "#E85D5D", "#A7C957", "#E9C46A", "#F28E2B",
-        "#2A9D8F", "#48BFE3", "#4EA8DE", "#4361EE",
-        "#3A0CA3", "#7209B7", "#C445A4", "#F284B6",
-        "#C76D45", "#84A98C", "#277DA1", "#9D8DF1", 
-        "#E69A66", "#F4B05D", "#70C1B3",
+        "#E85D5D", #colore A
+        "#A7C957", #colore B
+        "#E9C46A", #colore C
+        "#F28E2B", #colore E
+        "#2A9D8F", #colore F
+        "#48BFE3", #colore G
+        "#4EA8DE", #colore H
+        "#4361EE", #colore I
+        "#3A0CA3", #colore K
+        "#7209B7", #colore L
+        "#C445A4", #colore M
+        "#F284B6", #colore N
+        "#C76D45", #colore O
+        "#84A98C", #colore V
+        "#84A98C", #V
+        "#9D8DF1", #colore W
+        "#9D8DF1", #W
     ]
 
     # Conversione HEX -> RGB lineare
@@ -1157,4 +1196,3 @@ for obj_name, frames in animation_data.items():
     print(f"Animazione applicata: {obj_name}")
 
 print("Importazione completata!")
-
