@@ -4,6 +4,10 @@ import os
 from mathutils import Vector, Matrix
 
 
+
+
+
+
 # ==========================================
 # PULIZIA COMPLETA DELLA SCENA
 # ==========================================
@@ -105,8 +109,6 @@ spot_data = bpy.data.lights.new(
     type='SPOT'
 )
 
-spot_data.energy = 1000
-
 # Impostazioni fascio luminoso
 spot_data.spot_size = math.radians(45)
 spot_data.spot_blend = 0.15
@@ -127,6 +129,34 @@ spot.rotation_euler = tuple(
 
 spot.scale = (4.8, 4.8, 4.8)
 
+
+
+
+# Frame 717: luce spenta
+spot_data.energy = 0
+
+spot_data.keyframe_insert(
+    data_path="energy",
+    frame=628
+)
+
+# Frame 728: luce a piena potenza
+spot_data.energy = 1000
+
+spot_data.keyframe_insert(
+    data_path="energy",
+    frame=717
+)
+
+# Interpolazione graduale
+if spot_data.animation_data and spot_data.animation_data.action:
+
+    for fc in fcurves_of(spot_data):
+        for key in fc.keyframe_points:
+            key.interpolation = 'SINE'
+            key.easing = 'EASE_IN_OUT'
+            
+            
 
 # ==========================================
 # LUCE SUN - LUCE_SOLE
@@ -847,6 +877,49 @@ assegna_colori_poligoni()
 
 
 
+def anima_fade_in(obj, frame_inizio, durata):
+
+    for i, mat in enumerate(obj.data.materials):
+
+        if mat is None:
+            continue
+
+        # Rende indipendente il materiale
+        mat = mat.copy()
+        obj.data.materials[i] = mat
+
+        # Configurazione trasparenza
+        if hasattr(mat, "surface_render_method"):
+            mat.surface_render_method = 'DITHERED'
+
+        elif hasattr(mat, "blend_method"):
+            mat.blend_method = 'BLEND'
+
+        # Cerca il Principled BSDF
+        if not mat.use_nodes:
+            mat.use_nodes = True
+
+        for node in mat.node_tree.nodes:
+
+            if node.type == 'BSDF_PRINCIPLED':
+
+                alpha = node.inputs["Alpha"]
+
+                # Inizio: trasparente
+                alpha.default_value = 0.0
+
+                alpha.keyframe_insert(
+                    data_path="default_value",
+                    frame=frame_inizio
+                )
+
+                # Fine: opaco
+                alpha.default_value = 1.0
+
+                alpha.keyframe_insert(
+                    data_path="default_value",
+                    frame=frame_inizio + durata
+                )
 
 
 
@@ -980,7 +1053,15 @@ def anima_base(nome_base, t0, intervallo_1):
 # FUNZIONE PRINCIPALE
 # ============================================================
 
-def to_platonic_face(NOME_FACCIA, NOME_SOLIDO, numero_lati, delay):
+def to_platonic_face(
+    NOME_FACCIA,
+    NOME_SOLIDO,
+    numero_lati,
+    delay_first,
+    delay_others,
+    tempo_attesa,
+    durata_chiusura,
+    mod_fade):
 
     # --------------------------------------------------------
     # RECUPERO OGGETTI
@@ -1127,64 +1208,85 @@ def to_platonic_face(NOME_FACCIA, NOME_SOLIDO, numero_lati, delay):
 
         posizione_iniziale = nuova.location.copy()
 
+                # ----------------------------------------------------
+        # CALCOLO TEMPI ANIMAZIONE
         # ----------------------------------------------------
-        # KEYFRAME INIZIALE e FINALE
+
+        delay_faccia = delay_first + (numero_create > 0) * delay_others
+
+        # Ultimo frame in cui una faccia completa la comparsa
+        frame_apertura_completa = FRAME_MEDIO + delay_first + delay_others
+
+        # Inizio della chiusura, dopo l'attesa
+        frame_chiusura_inizio = frame_apertura_completa + tempo_attesa
+
+        frame_chiusura_fine = frame_chiusura_inizio + durata_chiusura
+
         # ----------------------------------------------------
+        # ANIMAZIONE SCALA: COMPARSA
+        # ----------------------------------------------------
+
+        if mod_fade == 'SCALE':
+            # Scala normale
+            nuova.keyframe_insert(
+                data_path="scale",
+                frame=FRAME_MEDIO + delay_faccia,
+                group="Animazione radiale"
+            )
+
+            # Scala zero
+            nuova.scale = [0, 0, 0]
+
+            nuova.keyframe_insert(
+                data_path="scale",
+                frame=FRAME_INIZIO + delay_faccia,
+                group="Animazione radiale"
+            )
+        elif mod_fade == 'FADE':
+            
+            for i, mat in enumerate(nuova.data.materials):
+                nuova.data.materials[i] = mat.copy()
+            
+            anima_fade_in(
+                nuova,
+                FRAME_INIZIO + delay_faccia,
+                durata=20
+                )
+
+        # ----------------------------------------------------
+        # ANIMAZIONE POSIZIONE: CHIUSURA
+        # ----------------------------------------------------
+
+        matrice_aperta = nuova.matrix_world.copy()
+
+        matrice_aperta.translation -= spostamento
+
+        nuova.matrix_world = matrice_aperta
+
+        # Posizione aperta: rimane ferma durante l'attesa
+        nuova.keyframe_insert(
+            data_path="location",
+            frame=frame_chiusura_inizio,
+            group="Animazione radiale"
+        )
+
+        # Posizione finale: faccia avvicinata al solido
+        nuova.location = posizione_iniziale
 
         nuova.keyframe_insert(
             data_path="location",
-            frame=FRAME_FINE + delay,
+            frame=frame_chiusura_fine,
             group="Animazione radiale"
         )
-        
-        nuova.keyframe_insert(
-            data_path="scale",
-            frame=FRAME_MEDIO + delay,
-            group="Animazione radiale"
-        )
-        
-        
 
         # ----------------------------------------------------
-        # KEYFRAME MEDIO
+        # INTERPOLAZIONE
         # ----------------------------------------------------
 
-        matrice_finale = nuova.matrix_world.copy()
-
-        matrice_finale.translation -= spostamento
-
-        nuova.matrix_world = matrice_finale
-
-        nuova.keyframe_insert(
-            data_path="location",
-            frame=FRAME_INIZIO + delay,
-            group="Animazione radiale"
-        )
-        
-        nuova.scale = [0,0,0]
-        
-        nuova.keyframe_insert(
-            data_path="scale",
-            frame=FRAME_INIZIO + delay,
-            group="Animazione radiale"
-        )
-        
-#        
-#        nuova.keyframe_insert(
-#            data_path="location",
-#            frame=FRAME_MEDIO + FRAME_FINE,
-#            group="Animazione radiale"
-#        )
-
-        # Ripristina la posizione iniziale
-        # per continuare la generazione
-        
         for fc in fcurves_of(nuova):
             for key in fc.keyframe_points:
                 key.interpolation = 'SINE'
                 key.easing = 'EASE_IN_OUT'
-
-        nuova.location = posizione_iniziale
         
         
         # Recupera o crea l'Empty relativo al solido
@@ -1221,21 +1323,70 @@ def to_platonic_face(NOME_FACCIA, NOME_SOLIDO, numero_lati, delay):
 # GENERAZIONE DI TUTTI I SOLIDI
 # ============================================================
 
+#            INDICAZIONI
+# --Facce:
+# la prima spawna in        t0_facce
+# le altre spawnano dopo    ritardo_altre_facce
+# rimangono separate per    tempo_separate_facce
+# si chiudono in            tempo_chiusura_facce
+
+# --Platonico:
+# spawna in t0_platonico
+# rimane visibile per tempo_visibile_platonico
+
+# "s" è il contatore del ciclo for
+#può essere usato per regolare i parametri 
+
+# mod_fade indica se le faccie appaiono scalando (='SCALE') o con fade (='FADE')
+mod_fade= 'SCALE'
+
 for s, solido in enumerate(lista_solidi):
+
     nome, lati = solido
-    t0 = [s*10 , -300][nome=="M_ico"] # M pate già montato
-    to_platonic_face(
+
+    if nome == "M_ico": #solido già montato
+        t0_facce = -500 #già comparse
+        ritardo_altre_facce = 0
+        tempo_separate_facce = 1
+        tempo_chiusura_facce = 1
+        t0_platonico = 10000 #di fatto non compare mai
+
+    elif nome == "A_tetra": #primo solido a montarsi
+        t0_facce = 40
+        ritardo_altre_facce = 20
+        tempo_separate_facce = 20
+        tempo_chiusura_facce = 20
+        t0_platonico = 10
+
+    else: #tutti gli altri
+        t0_facce = s * 3 + 110  #breve intervallo tra un solido e l'altro
+        ritardo_altre_facce = 0 #compaiono tutte insieme
+        tempo_separate_facce = 10
+        tempo_chiusura_facce = 10
+        t0_platonico = 10000 #di fatto non compaiono mai
+
+    
+    #COSTANTI
+    tempo_visibile_platonico = 84
+    
+    
+    to_platonic_face( #crea l'animazione delle facce
         nome,
         nome + "_base",
         lati,
-        t0 + 60 #inizio animazione
+        t0_facce,             # a che frame inizia animazione della prima faccia
+        ritardo_altre_facce,  # ritardo delle altre facce rispetto alla prima
+        tempo_separate_facce,       # quanti frames restano separate dal solido
+        tempo_chiusura_facce,       # durata chiusura
+        mod_fade
     )
-    anima_base(
-        nome + "_base",
-        10 + s, #frame spawn
-        t0 + 50 #intervallo visibile
-    )
+
     
+    anima_base(     #crea l'animazione delle basi
+        nome + "_base",
+        t0_platonico, # frame spawn
+        tempo_visibile_platonico                      # intervallo visibile
+    )
 
 
 # ============================================================
@@ -1376,3 +1527,6 @@ for obj_name, frames in animation_data.items():
     print(f"Animazione applicata: {obj_name}")
 
 print("Importazione completata!")
+
+
+scene.frame_set(1)
