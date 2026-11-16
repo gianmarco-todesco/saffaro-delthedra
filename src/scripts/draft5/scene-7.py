@@ -325,6 +325,71 @@ print("Camera rig creato correttamente!")
 
 
 
+# ==========================================
+# ICREAZIONE EMPTY
+# ==========================================
+
+
+def recupera_o_crea_controllo_generale():
+
+    nome = "CONTROLLO_GENERALE"
+
+    empty = bpy.data.objects.get(nome)
+
+    if empty is None:
+        empty = bpy.data.objects.new(nome, None)
+        empty.empty_display_type = 'SPHERE'
+        empty.empty_display_size = 2.0
+
+        collection_empty = bpy.data.collections.get("CONTROLLI_EMPTY")
+
+        if collection_empty is None:
+            collection_empty = bpy.data.collections.new("CONTROLLI_EMPTY")
+            bpy.context.scene.collection.children.link(collection_empty)
+
+        collection_empty.objects.link(empty)
+
+    return empty
+
+
+
+def recupera_o_crea_empty(nome_oggetto):
+
+    nome_empty = f"{nome_oggetto}_Empty"
+
+    empty = bpy.data.objects.get(nome_empty)
+
+    if empty is None:
+        empty = bpy.data.objects.new(nome_empty, None)
+        empty.empty_display_type = 'PLAIN_AXES'
+        empty.empty_display_size = 1.0
+
+        collection_empty = bpy.data.collections.get("CONTROLLI_EMPTY")
+
+        if collection_empty is None:
+            collection_empty = bpy.data.collections.new("CONTROLLI_EMPTY")
+            bpy.context.scene.collection.children.link(collection_empty)
+
+        collection_empty.objects.link(empty)
+
+    # Recupera il controllo generale
+    controllo = recupera_o_crea_controllo_generale()
+
+    # Imposta il parent mantenendo la trasformazione globale
+    if empty.parent != controllo:
+        matrice_world = empty.matrix_world.copy()
+        empty.parent = controllo
+        empty.matrix_world = matrice_world
+
+    return empty
+
+
+
+
+
+
+
+
 
 
 
@@ -535,6 +600,13 @@ if collection is None:
                 nome = nome.split("base")[0]+"base"
                 obj.name = nome
                 
+                # Imposta la base come figlia del relativo Empty
+                empty = recupera_o_crea_empty(nome)
+
+                matrice_world = obj.matrix_world.copy()
+                obj.parent = empty
+                obj.matrix_world = matrice_world
+                
                 for polygon in obj.data.polygons:
                     polygon.use_smooth = False
 
@@ -552,10 +624,10 @@ if collection is None:
         f"{imported_count} mesh."
     )
     # Nasconde la collection nel viewport
-    collection.hide_viewport = True
+    #collection.hide_viewport = True
 
     # Esclude la collection dal rendering
-    collection.hide_render = True
+    #collection.hide_render = True
 
 else:
 
@@ -572,10 +644,33 @@ else:
 
 
 
+# ==========================================
+# IMPORTAZIONE MESH AMBIENTE
+# ==========================================
 
+files_ambiente = [
+    "Muro_nero.obj",
+    "stanza.obj"
+]
 
+for filename in files_ambiente:
 
+    filepath = os.path.join(
+        asset_path,
+        "data-leo",
+        "ambiente",
+        filename
+        )
 
+    if not os.path.exists(filepath):
+        print(f"File non trovato: {filepath}")
+        continue
+
+    bpy.ops.wm.obj_import(filepath=filepath)
+
+    print(f"Importato: {filename}")
+
+print("Importazione completata!")
 
 
 
@@ -587,7 +682,7 @@ else:
 
 
 # ============================================================
-# PARAMETRI ANIMAZIONE
+# PARAMETRI ANIMAZIONE FACCE
 # ============================================================
 
 FRAME_INIZIO = 1
@@ -638,10 +733,10 @@ def assegna_colori_poligoni():
         "#2A9D8F", #colore F
         "#48BFE3", #colore G
         "#4EA8DE", #colore H
-        "#4361EE", #colore I
+        "#C445A4", #colore I 
         "#3A0CA3", #colore K
         "#7209B7", #colore L
-        "#C445A4", #colore M
+        "#4361EE", #colore M
         "#F284B6", #colore N
         "#C76D45", #colore O
         "#84A98C", #colore V
@@ -723,97 +818,36 @@ assegna_colori_poligoni()
 
 
 
-print("Cerco:")
-print("Empty presenti:", [
-    repr(obj.name)
-    for obj in bpy.data.objects
-    if obj.type == 'EMPTY'
-])
 
 
 
 
-def recupera_o_crea_controllo_generale():
+## ============================================================
+## ELIMINA EVENTUALI VECCHI HANDLER
+## ============================================================
 
-    nome = "CONTROLLO_GENERALE"
-
-    empty = bpy.data.objects.get(nome)
-
-    if empty is None:
-        empty = bpy.data.objects.new(nome, None)
-        empty.empty_display_type = 'SPHERE'
-        empty.empty_display_size = 2.0
-
-        collection_empty = bpy.data.collections.get("CONTROLLI_EMPTY")
-
-        if collection_empty is None:
-            collection_empty = bpy.data.collections.new("CONTROLLI_EMPTY")
-            bpy.context.scene.collection.children.link(collection_empty)
-
-        collection_empty.objects.link(empty)
-
-    return empty
+#for h in list(bpy.app.handlers.frame_change_post):
+#    if h.__name__ == "aggiorna_solido":
+#        bpy.app.handlers.frame_change_post.remove(h)
 
 
+## ============================================================
+## ELIMINA LA PRECEDENTE GENERAZIONE
+## ============================================================
 
-def recupera_o_crea_empty(nome_oggetto):
+#vecchia_collection = bpy.data.collections.get(NOME_COLLECTION)
 
-    nome_empty = f"{nome_oggetto}_Empty"
+#if vecchia_collection is not None:
 
-    empty = bpy.data.objects.get(nome_empty)
+#    for obj in list(vecchia_collection.objects):
+#        bpy.data.objects.remove(obj, do_unlink=True)
 
-    if empty is None:
-        empty = bpy.data.objects.new(nome_empty, None)
-        empty.empty_display_type = 'PLAIN_AXES'
-        empty.empty_display_size = 1.0
-
-        collection_empty = bpy.data.collections.get("CONTROLLI_EMPTY")
-
-        if collection_empty is None:
-            collection_empty = bpy.data.collections.new("CONTROLLI_EMPTY")
-            bpy.context.scene.collection.children.link(collection_empty)
-
-        collection_empty.objects.link(empty)
-
-    # Recupera il controllo generale
-    controllo = recupera_o_crea_controllo_generale()
-
-    # Imposta il parent mantenendo la trasformazione globale
-    if empty.parent != controllo:
-        matrice_world = empty.matrix_world.copy()
-        empty.parent = controllo
-        empty.matrix_world = matrice_world
-
-    return empty
+#    bpy.data.collections.remove(vecchia_collection)
 
 
 
 
 
-
-
-
-# ============================================================
-# ELIMINA EVENTUALI VECCHI HANDLER
-# ============================================================
-
-for h in list(bpy.app.handlers.frame_change_post):
-    if h.__name__ == "aggiorna_solido":
-        bpy.app.handlers.frame_change_post.remove(h)
-
-
-# ============================================================
-# ELIMINA LA PRECEDENTE GENERAZIONE
-# ============================================================
-
-vecchia_collection = bpy.data.collections.get(NOME_COLLECTION)
-
-if vecchia_collection is not None:
-
-    for obj in list(vecchia_collection.objects):
-        bpy.data.objects.remove(obj, do_unlink=True)
-
-    bpy.data.collections.remove(vecchia_collection)
 
 
 # Crea la collection per le nuove facce
@@ -821,6 +855,125 @@ if vecchia_collection is not None:
 collection = bpy.data.collections.new(NOME_COLLECTION)
 
 bpy.context.scene.collection.children.link(collection)
+
+
+
+
+
+
+def anima_base(nome_base, t0, intervallo_1):
+
+    import bpy
+
+    # ==========================================
+    # PARAMETRI TEMPORALI
+    # ==========================================
+    
+    intervallo_0 = 1
+    fade_in = 15
+    #intervallo_1 = 65
+    fade_out = 15
+
+    # ==========================================
+    # RICERCA MESH
+    # ==========================================
+
+    obj = bpy.data.objects.get(nome_base)
+
+    if obj is None:
+        print(f"Mesh non trovata: {nome_base}")
+        return
+
+    # ==========================================
+    # CALCOLO FRAME
+    # ==========================================
+
+    f0 = t0
+    f1 = f0 + intervallo_0
+    f2 = f1 + fade_in
+    f3 = f2 + intervallo_1
+    f4 = f3 + fade_out
+
+    # ==========================================
+    # VISIBILITÀ INIZIALE
+    # ==========================================
+
+    obj.hide_viewport = False
+    obj.hide_render = False
+
+    obj.keyframe_insert(
+        data_path="hide_viewport",
+        frame=f0
+    )
+
+    obj.keyframe_insert(
+        data_path="hide_render",
+        frame=f0
+    )
+
+    # ==========================================
+    # ANIMAZIONE SCALE
+    # ==========================================
+
+    keyframes = [
+        (f0, 0),
+        (f1, 0),
+        (f2, 1),
+        (f3, 1),
+        (f4, 0),
+    ]
+
+    for frame, value in keyframes:
+
+        obj.scale = (value, value, value)
+
+        obj.keyframe_insert(
+            data_path="scale",
+            frame=frame
+        )
+
+    # ==========================================
+    # NASCONDE LA MESH ALLA FINE
+    # ==========================================
+
+    obj.hide_viewport = True
+    obj.hide_render = True
+
+    obj.keyframe_insert(
+        data_path="hide_viewport",
+        frame=f4
+    )
+
+    obj.keyframe_insert(
+        data_path="hide_render",
+        frame=f4
+    )
+
+    # ==========================================
+    # INTERPOLAZIONE
+    # ==========================================
+
+    for fc in fcurves_of(obj) or []:
+
+        if fc.data_path == "scale":
+
+            for key in fc.keyframe_points:
+                key.interpolation = 'BEZIER'
+
+        elif fc.data_path in (
+            "hide_viewport",
+            "hide_render"
+        ):
+
+            for key in fc.keyframe_points:
+                key.interpolation = 'CONSTANT'
+
+    print(
+        f"Animazione {nome_base}: "
+        f"{f0} -> {f1} -> {f2} -> {f3} -> {f4}"
+    )
+
+
 
 
 # ============================================================
@@ -1070,12 +1223,19 @@ def to_platonic_face(NOME_FACCIA, NOME_SOLIDO, numero_lati, delay):
 
 for s, solido in enumerate(lista_solidi):
     nome, lati = solido
+    t0 = [s*10 , -300][nome=="M_ico"] # M pate già montato
     to_platonic_face(
         nome,
         nome + "_base",
         lati,
-        [s*7, -100][nome=="M_ico"]
+        t0 + 60 #inizio animazione
     )
+    anima_base(
+        nome + "_base",
+        10 + s, #frame spawn
+        t0 + 50 #intervallo visibile
+    )
+    
 
 
 # ============================================================
@@ -1100,9 +1260,6 @@ print(f"Frame finale: {FRAME_FINE}")
 print("Facce separate e animate radialmente.")
 print("Nessun frame_change_post registrato.")
 print("----------------------------------------")
-
-
-
 
 
 
@@ -1190,6 +1347,29 @@ for obj_name, frames in animation_data.items():
             obj.scale = properties["scale"]
             obj.keyframe_insert(
                 data_path="scale",
+                frame=frame
+            )
+        
+        # VISIBILITÀ
+        if "visible" in properties:
+
+            visible = properties["visible"]
+
+            # Viewport
+            obj.hide_viewport = not visible
+
+            # Rendering
+            obj.hide_render = not visible
+
+            # Keyframe viewport
+            obj.keyframe_insert(
+                data_path="hide_viewport",
+                frame=frame
+            )
+
+            # Keyframe rendering
+            obj.keyframe_insert(
+                data_path="hide_render",
                 frame=frame
             )
 
