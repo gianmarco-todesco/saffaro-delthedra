@@ -101,17 +101,21 @@ for name in objects_to_remove:
 
 
 # ==========================================
-# LUCE SPOT - LUCE_DIPINTO
+# LUCE AREA - LUCE_DIPINTO
 # ==========================================
 
 spot_data = bpy.data.lights.new(
     name="luce_dipinto",
-    type='SPOT'
+    type='AREA'
 )
 
-# Impostazioni fascio luminoso
-spot_data.spot_size = math.radians(45)
-spot_data.spot_blend = 0.15
+# Impostazioni luce
+spot_data.energy = 100
+spot_data.shape = 'SQUARE'
+spot_data.size = 1
+
+# Disattiva la proiezione delle ombre
+spot_data.use_shadow = False
 
 spot = bpy.data.objects.new(
     "luce_dipinto",
@@ -120,19 +124,21 @@ spot = bpy.data.objects.new(
 
 scene.collection.objects.link(spot)
 
-spot.location = (-4.9, -6, 1.58)
+spot.location = (-2.5, -4.24, 1)
 
 spot.rotation_euler = tuple(
     math.radians(v)
-    for v in (-287, 48.7, -53.3)
+    for v in (-287, 48.7, -44.239)
 )
 
-spot.scale = (4.8, 4.8, 4.8)
+spot.scale = (3.037, 3.037, 3.037)
 
 
+# ==========================================
+# ANIMAZIONE INTENSITÀ LUCE AREA
+# ==========================================
 
-
-# Frame 717: luce spenta
+# Frame 628: luce spenta
 spot_data.energy = 0
 
 spot_data.keyframe_insert(
@@ -140,8 +146,8 @@ spot_data.keyframe_insert(
     frame=628
 )
 
-# Frame 728: luce a piena potenza
-spot_data.energy = 1000
+# Frame 717: luce a piena potenza (100 W)
+spot_data.energy = 100
 
 spot_data.keyframe_insert(
     data_path="energy",
@@ -167,9 +173,6 @@ sun_data = bpy.data.lights.new(
     type='SUN'
 )
 
-# Strength / Energy
-sun_data.energy = 1.0
-
 sun = bpy.data.objects.new(
     "luce_sole",
     sun_data
@@ -183,6 +186,37 @@ sun.rotation_euler = tuple(
     math.radians(v)
     for v in (41.1, -1.8, -0.7)
 )
+
+
+# ==========================================
+# ANIMAZIONE INTENSITÀ LUCE SOLE
+# ==========================================
+
+# Frame 628: luce accesa
+sun_data.energy = 1
+
+sun_data.keyframe_insert(
+    data_path="energy",
+    frame=628
+)
+
+# Frame 717: luce spenta
+sun_data.energy = 0
+
+sun_data.keyframe_insert(
+    data_path="energy",
+    frame=717
+)
+
+# Interpolazione graduale
+if sun_data.animation_data and sun_data.animation_data.action:
+
+    for fc in fcurves_of(spot_data):
+        for key in fc.keyframe_points:
+            key.interpolation = 'SINE'
+            key.easing = 'EASE_IN_OUT'
+            
+            
 
 
 # ==========================================
@@ -356,7 +390,7 @@ print("Camera rig creato correttamente!")
 
 
 # ==========================================
-# ICREAZIONE EMPTY
+# CREAZIONE EMPTY
 # ==========================================
 
 
@@ -412,6 +446,10 @@ def recupera_o_crea_empty(nome_oggetto):
         empty.matrix_world = matrice_world
 
     return empty
+
+
+
+
 
 
 
@@ -704,6 +742,43 @@ print("Importazione completata!")
 
 
 
+## NASCONDE il Muro_nero
+
+obj = bpy.data.objects.get("Muro_nero")
+
+if obj is None:
+    print("Oggetto Muro_nero non trovato!")
+
+else:
+    # Invisibile e non renderizzabile fino al frame 200
+    obj.hide_viewport = True
+    obj.hide_render = True
+
+    obj.keyframe_insert(data_path="hide_viewport", frame=199)
+    obj.keyframe_insert(data_path="hide_render", frame=199)
+
+    # Visibile e renderizzabile dal frame 200
+    obj.hide_viewport = False
+    obj.hide_render = False
+
+    obj.keyframe_insert(data_path="hide_viewport", frame=500)
+    obj.keyframe_insert(data_path="hide_render", frame=500)
+
+    # Interpolazione costante: nessuna transizione graduale
+    for fc in obj.animation_data.action.fcurves:
+        for key in fc.keyframe_points:
+            key.interpolation = 'CONSTANT'
+
+    print("Muro_nero: visibile dal frame 200")
+
+
+
+# Stanza non deve creare ombra
+stanza = bpy.data.objects.get("stanza")
+
+if stanza is not None:
+    stanza.visible_shadow = False
+    stanza.visible_diffuse = False
 
 
 
@@ -751,50 +826,98 @@ lista_solidi = [
 
 
 
+# --------------------------------------------------
+# PALETTE COLORI
+# --------------------------------------------------
 
-def assegna_colori_poligoni():
-    print('assegno colori')
+palette = [
+    "#E85D5D",  # A
+    "#A7C957",  # B
+    "#E9C46A",  # C
+    "#F28E2B",  # E
+    "#2A9D8F",  # F
+    "#48BFE3",  # G
+    "#CE4F66",  # H
+    "#C445A4",  # I
+    "#3A0CA3",  # K
+    "#7209B7",  # L
+    "#26AFEE",  # M
+    "#F284B6",  # N
+    "#C76D45",  # O
+    "#84A98C",  # V
+    "#84A98C",  # V
+    "#9D8DF1",  # W
+    "#9D8DF1",  # W
+]
 
-    palette = [
-        "#E85D5D", #colore A
-        "#A7C957", #colore B
-        "#E9C46A", #colore C
-        "#F28E2B", #colore E
-        "#2A9D8F", #colore F
-        "#48BFE3", #colore G
-        "#4EA8DE", #colore H
-        "#C445A4", #colore I 
-        "#3A0CA3", #colore K
-        "#7209B7", #colore L
-        "#4361EE", #colore M
-        "#F284B6", #colore N
-        "#C76D45", #colore O
-        "#84A98C", #colore V
-        "#84A98C", #V
-        "#9D8DF1", #colore W
-        "#9D8DF1", #W
+
+# --------------------------------------------------
+# CONVERSIONE HEX -> RGB LINEARE
+# --------------------------------------------------
+
+def hex_to_rgb(hex_color):
+
+    rgb = [
+        int(hex_color[i:i+2], 16) / 255
+        for i in (1, 3, 5)
     ]
 
-    # Conversione HEX -> RGB lineare
-    def hex_to_rgb(hex_color):
+    return tuple(
+        ((c + 0.055) / 1.055) ** 2.4
+        if c > 0.04045
+        else c / 12.92
+        for c in rgb
+    )
 
-        rgb = [
-            int(hex_color[i:i+2], 16) / 255
-            for i in (1, 3, 5)
-        ]
 
-        return tuple(
-            ((c + 0.055) / 1.055) ** 2.4
-            if c > 0.04045
-            else c / 12.92
+# --------------------------------------------------
+# SCHIARISCE UNA PALETTE
+# --------------------------------------------------
+
+def schiarisci_colori(palette, intensita=0.65):
+
+    palette_schiarita = []
+
+    for colore in palette:
+
+        rgb = hex_to_rgb(colore)
+
+        rgb_chiaro = tuple(
+            c + (1.0 - c) * intensita
             for c in rgb
         )
 
-    # Recupera collection
-    collection = bpy.data.collections.get("poligoni sghembi")
+        # RGB lineare -> HEX sRGB
+        rgb_srgb = [
+            int(round(
+                255 * (
+                    12.92 * c
+                    if c <= 0.0031308
+                    else 1.055 * (c ** (1 / 2.4)) - 0.055
+                )
+            ))
+            for c in rgb_chiaro
+        ]
+
+        colore_hex = "#{:02X}{:02X}{:02X}".format(*rgb_srgb)
+
+        palette_schiarita.append(colore_hex)
+
+    return palette_schiarita
+
+
+# --------------------------------------------------
+# ASSEGNA I COLORI AGLI OGGETTI DI UNA COLLECTION
+# --------------------------------------------------
+
+def assegna_colori_poligoni(collection_name, palette):
+
+    print(f"Assegno colori alla collection: {collection_name}")
+
+    collection = bpy.data.collections.get(collection_name)
 
     if collection is None:
-        print("Collection 'poligoni sghembi' non trovata.")
+        print(f"Collection '{collection_name}' non trovata.")
         return
 
     # Considera solo oggetti mesh
@@ -804,8 +927,10 @@ def assegna_colori_poligoni():
     ]
 
     for i_test, obj in enumerate(oggetti):
+
+        # Correzione dell'indice per gli oggetti specifici
         if obj.name in ['V_cuboct_4', 'W_icosid_5']:
-            i = i_test -1
+            i = i_test - 1
         else:
             i = i_test
 
@@ -813,7 +938,7 @@ def assegna_colori_poligoni():
         rgb = hex_to_rgb(colore_hex)
 
         # Crea o recupera materiale
-        nome_materiale = f"Colore_{i+1:02d}"
+        nome_materiale = f"{collection_name}_Colore_{i+1:02d}"
 
         mat = bpy.data.materials.get(nome_materiale)
 
@@ -843,9 +968,14 @@ def assegna_colori_poligoni():
     print(f"Assegnati colori a {len(oggetti)} mesh.")
 
 
-##ESECUZIONE
-assegna_colori_poligoni()
+# --------------------------------------------------
+# ESECUZIONE
+# --------------------------------------------------
 
+palette_schiarita = schiarisci_colori(palette)
+
+assegna_colori_poligoni("poligoni sghembi", palette)
+assegna_colori_poligoni("basi", palette_schiarita)
 
 
 
@@ -1053,6 +1183,8 @@ def anima_base(nome_base, t0, intervallo_1):
 # FUNZIONE PRINCIPALE
 # ============================================================
 
+FRAME_APPARIZIONE_W = 0
+
 def to_platonic_face(
     NOME_FACCIA,
     NOME_SOLIDO,
@@ -1117,6 +1249,8 @@ def to_platonic_face(
     # --------------------------------------------------------
 
     numero_create = 0
+    
+    
 
     for i, poly in enumerate(mesh.polygons):
 
@@ -1278,6 +1412,38 @@ def to_platonic_face(
             frame=frame_chiusura_fine,
             group="Animazione radiale"
         )
+        
+                
+        if nuova.name.startswith("W"):
+
+            # Nasconde la faccia alla fine della chiusura
+            nuova.hide_viewport = False
+            nuova.hide_render = False
+
+            nuova.keyframe_insert(
+                data_path="hide_viewport",
+                frame=frame_chiusura_fine - 1
+            )
+
+            nuova.keyframe_insert(
+                data_path="hide_render",
+                frame=frame_chiusura_fine - 1
+            )
+
+            nuova.hide_viewport = True
+            nuova.hide_render = True
+
+            nuova.keyframe_insert(
+                data_path="hide_viewport",
+                frame=frame_chiusura_fine
+            )
+
+            nuova.keyframe_insert(
+                data_path="hide_render",
+                frame=frame_chiusura_fine
+            )
+            global FRAME_APPARIZIONE_W
+            FRAME_APPARIZIONE_W = frame_chiusura_fine
 
         # ----------------------------------------------------
         # INTERPOLAZIONE
@@ -1285,18 +1451,26 @@ def to_platonic_face(
 
         for fc in fcurves_of(nuova):
             for key in fc.keyframe_points:
-                key.interpolation = 'SINE'
-                key.easing = 'EASE_IN_OUT'
+
+                if fc.data_path in ("hide_viewport", "hide_render"):
+                    key.interpolation = 'CONSTANT'
+                else:
+                    key.interpolation = 'SINE'
+                    key.easing = 'EASE_IN_OUT'
         
         
         # Recupera o crea l'Empty relativo al solido
         empty = recupera_o_crea_empty(NOME_SOLIDO)
 
-        # Imposta il parent
         nuova.parent = empty
 
-        # Mantiene invariata la trasformazione globale della faccia
-        nuova.matrix_parent_inverse = empty.matrix_world.inverted()
+        # Verifica che la matrice dell'Empty sia invertibile
+        if abs(empty.matrix_world.to_3x3().determinant()) > 1e-8:
+
+            nuova.matrix_parent_inverse = empty.matrix_world.inverted()
+
+        else:
+            print(f"ATTENZIONE: Empty {empty.name} ha una matrice non invertibile")
 
         numero_create += 1
 
@@ -1343,6 +1517,9 @@ mod_fade= 'SCALE'
 for s, solido in enumerate(lista_solidi):
 
     nome, lati = solido
+    
+    if nome in ["V_cuboct_4", "W_icosid_5"]:
+        s -= 1
 
     if nome == "M_ico": #solido già montato
         t0_facce = -500 #già comparse
@@ -1413,6 +1590,84 @@ print("Nessun frame_change_post registrato.")
 print("----------------------------------------")
 
 
+
+
+
+
+
+
+
+
+# ------------------------------------------------
+# GESTIONE W
+# ------------------------------------------------
+
+percorso = os.path.join(
+    asset_path,
+    "data-leo",
+    "W.stl"
+)
+
+# Importa il solido
+bpy.ops.wm.stl_import(filepath=percorso)
+
+# Recupera l'oggetto appena importato
+W = bpy.context.selected_objects[0]
+
+# Rinomina l'oggetto
+W.name = "W"
+W.data.name = "W_Mesh"
+
+# Scala il solido
+W.scale = (0.685, 0.685, 0.685)
+
+# Imposta Shade Flat
+bpy.ops.object.shade_flat()
+
+# Recupera o crea l'Empty relativo al solido
+empty = recupera_o_crea_empty("W_icosid_3_base")
+
+# Imposta il parent
+W.parent = empty
+
+# Mantiene la posizione e la rotazione attuali rispetto alla scena
+W.matrix_parent_inverse = empty.matrix_world.inverted()
+
+print("W.stl importato, scalato e collegato all'Empty W_icosid_3")
+
+
+
+# Invisibile e non renderizzabile fino al frame 200
+W.hide_viewport = True
+W.hide_render = True
+
+W.keyframe_insert(data_path="hide_viewport", frame=FRAME_APPARIZIONE_W-1)
+W.keyframe_insert(data_path="hide_render", frame=FRAME_APPARIZIONE_W-1)
+
+# Visibile e renderizzabile dal frame 200
+W.hide_viewport = False
+W.hide_render = False
+
+W.keyframe_insert(data_path="hide_viewport", frame=FRAME_APPARIZIONE_W)
+W.keyframe_insert(data_path="hide_render", frame=FRAME_APPARIZIONE_W)
+
+# Transizione istantanea
+for fc in W.animation_data.action.fcurves:
+    for key in fc.keyframe_points:
+        key.interpolation = 'CONSTANT'
+
+
+# Assegna a W gli stessi materiali di W_icosid_3
+solido_originale = bpy.data.objects.get("W_icosid_3")
+
+if solido_originale is not None:
+    W.data.materials.clear()
+
+    for mat in solido_originale.data.materials:
+        W.data.materials.append(mat)
+
+else:
+    print("Oggetto W_icosid_3 non trovato!")
 
 
 
